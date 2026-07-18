@@ -1,0 +1,2150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM商机流转多Agent协同平台 - 架构设计</title>
+<style>
+:root {
+  --bg: #0f172a; --card: #1e293b; --card-hover: #334155; --text: #f1f5f9; --text-dim: #94a3b8;
+  --accent: #38bdf8; --accent2: #818cf8; --accent3: #34d399; --accent4: #f472b6;
+  --accent5: #fbbf24; --accent6: #a78bfa; --accent7: #fb923c; --accent8: #22d3ee;
+  --border: #334155; --success: #22c55e; --warning: #f59e0b; --danger: #ef4444;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; line-height: 1.6; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.header { text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 16px; margin-bottom: 24px; border: 1px solid var(--border); }
+.header h1 { font-size: 2.2em; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+.header .subtitle { color: var(--text-dim); font-size: 1.05em; max-width: 700px; margin: 0 auto; }
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
+.tab-btn { padding: 10px 24px; border: 1px solid var(--border); background: var(--card); color: var(--text-dim); border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.3s; }
+.tab-btn:hover { border-color: var(--accent); color: var(--text); }
+.tab-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; border-color: transparent; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+.card { background: var(--card); border-radius: 14px; padding: 24px; margin-bottom: 20px; border: 1px solid var(--border); transition: border-color 0.3s; }
+.card:hover { border-color: var(--accent); }
+.card h2 { font-size: 1.3em; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+.card h3 { font-size: 1.1em; margin: 20px 0 12px; color: var(--accent); }
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.agent-card { background: linear-gradient(135deg, var(--card) 0%, var(--card-hover) 100%); border-radius: 14px; padding: 20px; border: 1px solid var(--border); position: relative; overflow: hidden; transition: transform 0.3s, box-shadow 0.3s; }
+.agent-card:hover { transform: translateY(-4px); box-shadow: 0 10px 40px rgba(56,189,248,0.15); }
+.agent-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.agent-card.c1::before { background: var(--accent); } .agent-card.c2::before { background: var(--accent2); }
+.agent-card.c3::before { background: var(--accent3); } .agent-card.c4::before { background: var(--accent4); }
+.agent-card.c5::before { background: var(--accent5); } .agent-card.c6::before { background: var(--accent6); }
+.agent-card.c7::before { background: var(--accent7); } .agent-card.c8::before { background: var(--accent8); }
+.agent-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.agent-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; }
+.agent-icon.c1 { background: rgba(56,189,248,0.15); color: var(--accent); }
+.agent-icon.c2 { background: rgba(129,140,248,0.15); color: var(--accent2); }
+.agent-icon.c3 { background: rgba(52,211,153,0.15); color: var(--accent3); }
+.agent-icon.c4 { background: rgba(244,114,182,0.15); color: var(--accent4); }
+.agent-icon.c5 { background: rgba(251,191,36,0.15); color: var(--accent5); }
+.agent-icon.c6 { background: rgba(167,139,250,0.15); color: var(--accent6); }
+.agent-icon.c7 { background: rgba(251,146,60,0.15); color: var(--accent7); }
+.agent-icon.c8 { background: rgba(34,211,238,0.15); color: var(--accent8); }
+.agent-name { font-size: 1.15em; font-weight: 700; }
+.agent-role { font-size: 0.8em; color: var(--text-dim); }
+.agent-desc { color: var(--text-dim); font-size: 0.9em; margin-bottom: 12px; }
+.agent-io { display: flex; flex-direction: column; gap: 6px; }
+.io-row { display: flex; align-items: center; gap: 8px; font-size: 0.82em; }
+.io-label { padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 0.75em; }
+.io-label.in { background: rgba(34,197,94,0.15); color: var(--success); }
+.io-label.out { background: rgba(56,189,248,0.15); color: var(--accent); }
+.io-label.tool { background: rgba(251,191,36,0.15); color: var(--accent5); }
+.arch-diagram { background: var(--card); border-radius: 14px; padding: 30px; border: 1px solid var(--border); overflow-x: auto; }
+.arch-layer { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.arch-node { padding: 10px 18px; border-radius: 10px; font-size: 0.85em; font-weight: 600; text-align: center; min-width: 120px; position: relative; }
+.arch-node.user { background: rgba(56,189,248,0.15); color: var(--accent); border: 1px solid var(--accent); }
+.arch-node.agent { background: rgba(129,140,248,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+.arch-node.tool { background: rgba(52,211,153,0.15); color: var(--accent3); border: 1px solid var(--accent3); }
+.arch-node.data { background: rgba(251,191,36,0.15); color: var(--accent5); border: 1px solid var(--accent5); }
+.arch-node.guard { background: rgba(244,114,182,0.15); color: var(--accent4); border: 1px solid var(--accent4); }
+.arch-node.infra { background: rgba(167,139,250,0.15); color: var(--accent6); border: 1px solid var(--accent6); }
+.arch-arrow { color: var(--text-dim); font-size: 1.2em; }
+.layer-label { font-size: 0.75em; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; text-align: center; }
+.governance-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.governance-table th { background: linear-gradient(135deg, #1e293b, #334155); color: var(--text); padding: 14px 16px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--accent); }
+.governance-table td { padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--text-dim); vertical-align: top; }
+.governance-table tr:hover td { color: var(--text); background: rgba(56,189,248,0.03); }
+.governance-table .key { color: var(--accent); font-weight: 600; }
+.sample-card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); border-left: 4px solid var(--accent3); }
+.sample-card .sample-id { font-size: 0.75em; color: var(--accent3); font-weight: 600; margin-bottom: 6px; }
+.sample-card .sample-scenario { font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.sample-card .sample-flow { font-size: 0.85em; color: var(--text-dim); line-height: 1.8; }
+.sample-card .sample-flow span { color: var(--accent); }
+.status-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }
+.status-ok { background: rgba(34,197,94,0.15); color: var(--success); }
+.status-warn { background: rgba(245,158,11,0.15); color: var(--warning); }
+.status-err { background: rgba(239,68,68,0.15); color: var(--danger); }
+pre.code-block { background: #0d1117; border-radius: 10px; padding: 16px; overflow-x: auto; font-size: 0.85em; line-height: 1.7; border: 1px solid #30363d; }
+pre.code-block code { color: #c9d1d9; font-family: 'SF Mono', Monaco, Consolas, monospace; }
+.keyword { color: #ff7b72; } .string { color: #a5d6ff; } .function { color: #d2a8ff; }
+.comment { color: #8b949e; } .number { color: #79c0ff; }
+.flow-step { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.flow-num { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85em; flex-shrink: 0; }
+.flow-content { flex: 1; } .flow-title { font-weight: 600; margin-bottom: 4px; } .flow-desc { color: var(--text-dim); font-size: 0.9em; }
+.flow-arrow { width: 2px; height: 20px; background: linear-gradient(var(--accent), var(--accent2)); margin-left: 15px; margin-bottom: 4px; }
+@media (max-width: 768px) { .header h1 { font-size: 1.5em; } .agent-grid { grid-template-columns: 1fr; } .arch-layer { flex-direction: column; } .arch-arrow { transform: rotate(90deg); } }
+
+/* ===== 提交资料按钮 ===== */
+.fab-submit { position: fixed; bottom: 32px; right: 32px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #38bdf8, #818cf8); border: none; cursor: pointer; font-size: 16px; font-weight: 700; color: white; box-shadow: 0 6px 24px rgba(56,189,248,0.4); z-index: 100; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden; white-space: nowrap; }
+.fab-submit:hover { width: 150px; border-radius: 30px; transform: translateY(-2px); box-shadow: 0 10px 36px rgba(56,189,248,0.55); }
+.fab-submit .fab-icon { font-size: 24px; flex-shrink: 0; }
+.fab-submit .fab-text { opacity: 0; max-width: 0; overflow: hidden; transition: all 0.3s; }
+.fab-submit:hover .fab-text { opacity: 1; max-width: 100px; }
+
+/* ===== 遮罩 ===== */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 200; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.25s ease; }
+.modal-overlay.hidden { display: none; }
+
+/* ===== 对话框 ===== */
+.submit-modal { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 18px; width: 660px; max-width: 94vw; max-height: 88vh; overflow-y: auto; border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: slideUp 0.35s ease; }
+@keyframes slideUp { from { opacity:0; transform: translateY(40px); } to { opacity:1; transform: translateY(0); } }
+.submit-modal .modal-header { padding: 20px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.submit-modal .modal-header h2 { font-size: 1.25em; display: flex; align-items: center; gap: 10px; }
+.submit-modal .modal-close { background: none; border: none; color: var(--text-dim); font-size: 22px; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: all 0.2s; }
+.submit-modal .modal-close:hover { background: rgba(239,68,68,0.15); color: var(--danger); }
+.submit-modal .modal-body { padding: 24px 28px; }
+.submit-modal .modal-footer { padding: 16px 28px 24px; display: flex; gap: 12px; justify-content: flex-end; }
+
+/* ===== 表单 ===== */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label { font-size: 0.82em; font-weight: 600; color: var(--text-dim); }
+.form-group label .required { color: var(--danger); margin-left: 2px; }
+.form-group input, .form-group select, .form-group textarea { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: #0f172a; color: var(--text); font-size: 0.9em; font-family: inherit; transition: border-color 0.3s; outline: none; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
+.form-group textarea { resize: vertical; min-height: 80px; }
+
+/* ===== 上传区域 ===== */
+.upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s; background: rgba(56,189,248,0.02); }
+.upload-zone:hover { border-color: var(--accent); background: rgba(56,189,248,0.06); }
+.upload-zone .upload-icon { font-size: 32px; margin-bottom: 8px; }
+.upload-zone .upload-text { color: var(--text-dim); font-size: 0.85em; }
+.upload-zone .upload-hint { color: var(--text-dim); font-size: 0.75em; margin-top: 4px; }
+.upload-file-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.upload-file-tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(56,189,248,0.1); border-radius: 20px; font-size: 0.8em; color: var(--accent); }
+.upload-file-tag .remove-file { cursor: pointer; font-weight: bold; color: var(--danger); }
+
+/* ===== 按钮 ===== */
+.btn { padding: 10px 22px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.3s; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
+.btn-primary:hover { box-shadow: 0 4px 16px rgba(56,189,248,0.3); transform: translateY(-1px); }
+.btn-secondary { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--text); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+/* ===== 工作流结果面板 ===== */
+.result-panel { margin-top: 20px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.result-panel.hidden { display: none; }
+.workflow-steps { padding: 20px; }
+.workflow-step-item { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid rgba(51,65,85,0.6); opacity: 0.35; transition: all 0.5s; }
+.workflow-step-item:last-child { border-bottom: none; }
+.workflow-step-item.active { opacity: 1; }
+.workflow-step-item.done { opacity: 0.8; }
+.wf-step-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; position: relative; }
+.wf-step-icon.pending { background: rgba(148,163,184,0.12); color: var(--text-dim); }
+.wf-step-icon.running { background: rgba(56,189,248,0.2); color: var(--accent); animation: pulse 1.2s infinite; }
+.wf-step-icon.done { background: rgba(34,197,94,0.15); color: var(--success); }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.4); } 50% { box-shadow: 0 0 0 10px rgba(56,189,248,0); } }
+.wf-step-info { flex: 1; }
+.wf-step-name { font-weight: 600; font-size: 0.9em; }
+.wf-step-desc { font-size: 0.78em; color: var(--text-dim); }
+.wf-step-status { font-size: 0.75em; font-weight: 600; }
+.wf-step-status.running { color: var(--accent); }
+.wf-step-status.done { color: var(--success); }
+
+/* ===== 评级结果卡片 ===== */
+.rating-card { background: linear-gradient(135deg, rgba(56,189,248,0.08) 0%, rgba(129,140,248,0.08) 100%); border-radius: 14px; padding: 24px; text-align: center; border: 1px solid rgba(56,189,248,0.25); }
+.rating-card.hidden { display: none; }
+.rating-grade { font-size: 5em; font-weight: 900; line-height: 1; margin-bottom: 8px; }
+.rating-grade.S { background: linear-gradient(135deg, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.rating-grade.A { background: linear-gradient(135deg, #34d399, #22c55e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.rating-grade.B { background: linear-gradient(135deg, #38bdf8, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.rating-grade.C { background: linear-gradient(135deg, #a78bfa, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.rating-grade.D { background: linear-gradient(135deg, #94a3b8, #64748b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.rating-score { font-size: 1.1em; color: var(--text-dim); margin-bottom: 12px; }
+.rating-score strong { color: var(--text); font-size: 1.3em; }
+.rating-tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+.rating-tag { padding: 5px 14px; border-radius: 20px; font-size: 0.78em; font-weight: 600; }
+.rating-tag.hot { background: rgba(239,68,68,0.12); color: var(--danger); }
+.rating-tag.warm { background: rgba(245,158,11,0.12); color: var(--warning); }
+.rating-tag.cool { background: rgba(56,189,248,0.12); color: var(--accent); }
+.rating-detail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.rating-detail-item { text-align: center; }
+.rating-detail-item .dim-label { font-size: 0.72em; color: var(--text-dim); }
+.rating-detail-item .dim-value { font-size: 1.1em; font-weight: 700; color: var(--text); }
+.rating-detail-item .dim-bar { height: 4px; border-radius: 2px; margin-top: 6px; }
+.dim-bar.high { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.dim-bar.mid { background: linear-gradient(90deg, var(--accent5), var(--accent)); }
+.dim-bar.low { background: linear-gradient(90deg, var(--text-dim), var(--accent5)); }
+.btn-reset { margin-top: 16px; }
+
+/* ===== 加载旋转器 ===== */
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(56,189,248,0.25); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Agent 详细输出 ===== */
+.agent-outputs { padding: 0 20px 20px; }
+.agent-output-card { background: rgba(15,23,42,0.6); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 3px solid transparent; animation: fadeIn 0.5s ease; }
+.agent-output-card.hidden { display: none; }
+.agent-output-card.c1 { border-left-color: var(--accent); }
+.agent-output-card.c2 { border-left-color: var(--accent2); }
+.agent-output-card.c3 { border-left-color: var(--accent3); }
+.agent-output-card.c8 { border-left-color: var(--accent8); }
+.agent-output-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.agent-output-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.agent-output-icon.c1 { background: rgba(56,189,248,0.15); color: var(--accent); }
+.agent-output-icon.c2 { background: rgba(129,140,248,0.15); color: var(--accent2); }
+.agent-output-icon.c3 { background: rgba(52,211,153,0.15); color: var(--accent3); }
+.agent-output-icon.c8 { background: rgba(34,211,238,0.15); color: var(--accent8); }
+.agent-output-name { font-weight: 700; font-size: 0.88em; }
+.agent-output-body { font-size: 0.82em; color: var(--text-dim); line-height: 1.7; }
+.agent-output-body .highlight { color: var(--accent5); font-weight: 600; }
+.agent-output-body .signal-tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; margin: 2px 4px; background: rgba(244,114,182,0.12); color: var(--accent4); }
+.agent-output-body .doc-tag { display: block; padding: 6px 12px; border-radius: 8px; font-size: 0.85em; margin: 4px 0; background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.15); }
+.agent-output-body .doc-tag .doc-title { color: var(--accent); font-weight: 600; }
+.agent-output-body .doc-tag .doc-relevance { color: var(--text-dim); font-size: 0.8em; }
+.case-card-mini { background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.15); border-radius: 10px; padding: 10px 14px; margin: 6px 0; }
+.case-card-mini .case-name { color: var(--accent3); font-weight: 600; font-size: 0.85em; }
+.case-card-mini .case-result { color: var(--text-dim); font-size: 0.78em; }
+.script-block { background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.15); border-radius: 10px; padding: 12px 16px; margin: 8px 0; position: relative; }
+.script-block::before { content: '💬 推荐话术'; font-size: 0.7em; color: var(--accent5); font-weight: 700; position: absolute; top: -9px; left: 16px; background: var(--bg); padding: 0 8px; }
+.script-block .script-text { margin-top: 4px; font-style: italic; color: var(--text); font-size: 0.88em; }
+.crm-fields-block { background: rgba(34,211,238,0.05); border: 1px solid rgba(34,211,238,0.2); border-radius: 10px; padding: 12px 16px; margin: 8px 0; }
+.crm-fields-block .crm-title { color: var(--accent8); font-weight: 700; font-size: 0.8em; margin-bottom: 6px; }
+.crm-field { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.75em; margin: 2px 4px; background: rgba(34,211,238,0.1); }
+.crm-field .cf-key { color: var(--accent8); font-weight: 600; }
+.crm-field .cf-val { color: var(--text); }
+.probability-bar { height: 6px; border-radius: 3px; background: rgba(148,163,184,0.15); margin-top: 4px; overflow: hidden; }
+.probability-bar .fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent3), var(--accent)); transition: width 0.8s ease; }
+
+/* ===== 节省时间横幅 ===== */
+.time-saved-banner { margin: 0 20px 16px; padding: 14px 20px; border-radius: 10px; background: linear-gradient(135deg, rgba(52,211,153,0.1), rgba(56,189,248,0.05)); border: 1px solid rgba(52,211,153,0.25); text-align: center; animation: fadeIn 0.6s ease; }
+.time-saved-banner.hidden { display: none; }
+.time-saved-banner .ts-icon { font-size: 1.5em; }
+.time-saved-banner .ts-main { font-size: 1em; font-weight: 700; color: var(--accent3); }
+.time-saved-banner .ts-detail { font-size: 0.78em; color: var(--text-dim); margin-top: 4px; }
+.time-saved-banner .ts-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; justify-content: center; }
+.time-saved-banner .ts-bar { height: 8px; border-radius: 4px; flex: 1; max-width: 300px; background: rgba(148,163,184,0.15); overflow: hidden; }
+.time-saved-banner .ts-bar-fill { height: 100%; border-radius: 4px; background: var(--success); transition: width 1s ease; }
+.time-saved-banner .ts-label { font-size: 0.7em; color: var(--text-dim); white-space: nowrap; }
+
+/* ===== 回写日志表 ===== */
+.log-section { margin: 0 20px 20px; }
+.log-section.hidden { display: none; }
+.log-section h3 { font-size: 0.95em; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.log-table-wrap { max-height: 280px; overflow-y: auto; border-radius: 10px; border: 1px solid var(--border); }
+.log-table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
+.log-table th { background: #1a2332; color: var(--text-dim); padding: 8px 10px; text-align: left; font-weight: 600; position: sticky; top: 0; z-index: 1; border-bottom: 2px solid var(--border); }
+.log-table td { padding: 7px 10px; border-bottom: 1px solid rgba(51,65,85,0.5); color: var(--text-dim); }
+.log-table tr:hover td { background: rgba(56,189,248,0.04); color: var(--text); }
+.log-table .log-idx { color: var(--text-dim); font-size: 0.8em; }
+.log-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 700; }
+.log-badge.S { background: rgba(251,191,36,0.15); color: #fbbf24; }
+.log-badge.A { background: rgba(34,211,153,0.15); color: #34d399; }
+.log-badge.B { background: rgba(56,189,248,0.15); color: #38bdf8; }
+.log-badge.C { background: rgba(167,139,250,0.15); color: #a78bfa; }
+.log-badge.D { background: rgba(148,163,184,0.15); color: #94a3b8; }
+.log-empty { text-align: center; padding: 24px; color: var(--text-dim); font-size: 0.85em; }
+
+/* ===== 评级分布面板 ===== */
+.distro-panel { background: var(--card-hover); border-radius: 12px; padding: 18px; border: 1px solid var(--border); }
+.distro-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.distro-row:last-child { margin-bottom: 0; }
+.distro-grade { width: 28px; text-align: center; font-weight: 900; font-size: 1em; flex-shrink: 0; }
+.distro-grade.S { color: #fbbf24; } .distro-grade.A { color: #34d399; } .distro-grade.B { color: #38bdf8; } .distro-grade.C { color: #a78bfa; } .distro-grade.D { color: #94a3b8; }
+.distro-bar-wrap { flex: 1; height: 18px; border-radius: 4px; background: rgba(148,163,184,0.08); overflow: hidden; }
+.distro-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+.distro-bar-fill.S { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+.distro-bar-fill.A { background: linear-gradient(90deg, #34d399, #22c55e); }
+.distro-bar-fill.B { background: linear-gradient(90deg, #38bdf8, #3b82f6); }
+.distro-bar-fill.C { background: linear-gradient(90deg, #a78bfa, #8b5cf6); }
+.distro-bar-fill.D { background: linear-gradient(90deg, #94a3b8, #64748b); }
+.distro-count { font-size: 0.78em; color: var(--text); font-weight: 600; min-width: 36px; text-align: right; }
+.distro-pct { font-size: 0.72em; color: var(--text-dim); min-width: 36px; text-align: right; }
+.distro-summary { text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.8em; color: var(--text-dim); }
+.distro-summary strong { color: var(--text); }
+
+/* ===== 质检/审批输出卡配色 ===== */
+.agent-output-card.c6 { border-left-color: var(--accent6); }
+.agent-output-card.c7 { border-left-color: var(--accent7); }
+.agent-output-icon.c6 { background: rgba(167,139,250,0.15); color: var(--accent6); }
+.agent-output-icon.c7 { background: rgba(251,146,60,0.15); color: var(--accent7); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>CRM商机流转多Agent协同平台</h1>
+    <p class="subtitle">解决CRM跟进记录分散、客户状态不可追踪、商机推进无闭环问题。通过8个智能Agent角色 + RAG召回 + MCP工具调用 + 链路治理，实现商机全生命周期自动化流转与协同。</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('agents')">八大Agent角色</button>
+    <button class="tab-btn" onclick="showTab('architecture')">系统架构</button>
+    <button class="tab-btn" onclick="showTab('flow')">协同链路</button>
+    <button class="tab-btn" onclick="showTab('governance')">链路治理</button>
+    <button class="tab-btn" onclick="showTab('samples')">黄金样本</button>
+    <button class="tab-btn" onclick="showTab('tech')">技术实现</button>
+    <button class="tab-btn" onclick="showTab('results')">业务结果</button>
+  </div>
+
+  <div id="agents" class="tab-panel active">
+    <div class="card">
+      <h2>八智能体角色定义与职责边界</h2>
+      <div class="agent-grid">
+        <div class="agent-card c1">
+          <div class="agent-header">
+            <div class="agent-icon c1">1</div>
+            <div>
+              <div class="agent-name">线索评级Agent</div>
+              <div class="agent-role">Lead Scoring Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">基于客户行为数据、企业画像、历史成交记录，对新线索进行多维度评分与分级（S/A/B/C/D），输出优先级排序。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 线索表单、官网行为、邮件打开率、企业工商信息</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 线索评分(0-100)、等级标签、分配建议、跟进urgency</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> 企业征信API、行业数据库、历史成交模型</div>
+          </div>
+        </div>
+
+        <div class="agent-card c2">
+          <div class="agent-header">
+            <div class="agent-icon c2">2</div>
+            <div>
+              <div class="agent-name">客户画像Agent</div>
+              <div class="agent-role">Customer Profile Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">整合CRM、邮件、会议记录、合同等多源数据，动态生成360度客户画像，识别决策链关键人、预算周期、竞品使用情况。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> CRM记录、邮件往来、会议纪要、合同历史、社交媒体</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 客户画像JSON、决策链图谱、风险预警、关系热力图</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> NLP实体抽取、关系图谱构建、时间序列分析</div>
+          </div>
+        </div>
+
+        <div class="agent-card c3">
+          <div class="agent-header">
+            <div class="agent-icon c3">3</div>
+            <div>
+              <div class="agent-name">知识检索Agent</div>
+              <div class="agent-role">Knowledge Retrieval Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">通过RAG架构检索企业知识库（产品文档、竞品分析、成功案例、FAQ），为销售提供实时话术支持与方案推荐。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 销售当前场景描述、客户问题、产品需求关键词</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> Top-K相关文档、推荐话术、竞品对比表、成功案例</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> 向量数据库(Chroma/Milvus)、Embedding模型、重排序模型</div>
+          </div>
+        </div>
+
+        <div class="agent-card c4">
+          <div class="agent-header">
+            <div class="agent-icon c4">4</div>
+            <div>
+              <div class="agent-name">任务规划Agent</div>
+              <div class="agent-role">Task Planning Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">根据商机阶段、客户画像、历史最佳实践，自动生成跟进任务序列（拜访、方案、报价、谈判），并分配执行人与截止时间。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 商机阶段、客户画像、销售日历、团队负载</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 任务DAG图、执行人分配、截止时间、依赖关系</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> 日历API、任务调度引擎、负载均衡算法</div>
+          </div>
+        </div>
+
+        <div class="agent-card c5">
+          <div class="agent-header">
+            <div class="agent-icon c5">5</div>
+            <div>
+              <div class="agent-name">工具执行Agent</div>
+              <div class="agent-role">Tool Execution Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">通过MCP协议调用外部工具（发邮件、建日程、生成PPT、查物流、调报价系统），将规划任务落地为具体操作。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 任务指令、工具参数、上下文状态</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 工具执行结果、异常报告、状态变更</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> MCP Server、邮件API、日历API、文档生成API</div>
+          </div>
+        </div>
+
+        <div class="agent-card c6">
+          <div class="agent-header">
+            <div class="agent-icon c6">6</div>
+            <div>
+              <div class="agent-name">质检Agent</div>
+              <div class="agent-role">Quality Assurance Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">对销售跟进记录、客户沟通内容、方案文档进行质量检查，识别信息缺失、逻辑矛盾、合规风险，生成质检报告。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 跟进记录、沟通录音转写、方案文档、合规规则库</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 质检评分、缺失项清单、风险提示、改进建议</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> 规则引擎、NLP一致性检测、合规知识库</div>
+          </div>
+        </div>
+
+        <div class="agent-card c7">
+          <div class="agent-header">
+            <div class="agent-icon c7">7</div>
+            <div>
+              <div class="agent-name">审批守卫Agent</div>
+              <div class="agent-role">Approval Guard Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">对关键节点（大额折扣、合同变更、客户转交）进行自动审批校验，匹配审批矩阵，触发多级审批流，记录审计日志。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 审批申请、金额阈值、客户等级、历史折扣率</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 审批结果、驳回原因、升级路径、审计日志</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> 审批矩阵引擎、BPMN工作流、数字签名</div>
+          </div>
+        </div>
+
+        <div class="agent-card c8">
+          <div class="agent-header">
+            <div class="agent-icon c8">8</div>
+            <div>
+              <div class="agent-name">CRM回写Agent</div>
+              <div class="agent-role">CRM Write-back Agent</div>
+            </div>
+          </div>
+          <div class="agent-desc">将Agent协同产生的所有结构化数据（评分、画像、任务、质检结果）自动回写CRM系统，确保数据一致性与可追溯性。</div>
+          <div class="agent-io">
+            <div class="io-row"><span class="io-label in">INPUT</span> 各Agent输出结果、CRM数据模型、字段映射规则</div>
+            <div class="io-row"><span class="io-label out">OUTPUT</span> 回写确认、变更日志、数据一致性校验报告</div>
+            <div class="io-row"><span class="io-label tool">TOOL</span> CRM API(Salesforce/纷享销客/销售易)、ETL管道、CDC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="architecture" class="tab-panel">
+    <div class="card">
+      <h2>分层系统架构设计</h2>
+      <div class="arch-diagram">
+        <div class="layer-label">用户交互层</div>
+        <div class="arch-layer">
+          <div class="arch-node user">销售代表</div>
+          <div class="arch-arrow">-></div>
+          <div class="arch-node user">销售经理</div>
+          <div class="arch-arrow">-></div>
+          <div class="arch-node user">CRM管理员</div>
+        </div>
+        <div style="text-align:center; color:var(--text-dim); font-size:1.5em; margin:8px 0;">|</div>
+        <div class="layer-label">Agent编排层 (Orchestrator)</div>
+        <div class="arch-layer">
+          <div class="arch-node agent">线索评级Agent</div>
+          <div class="arch-node agent">客户画像Agent</div>
+          <div class="arch-node agent">知识检索Agent</div>
+          <div class="arch-node agent">任务规划Agent</div>
+          <div class="arch-node agent">工具执行Agent</div>
+          <div class="arch-node agent">质检Agent</div>
+          <div class="arch-node guard">审批守卫Agent</div>
+          <div class="arch-node agent">CRM回写Agent</div>
+        </div>
+        <div style="text-align:center; color:var(--text-dim); font-size:1.5em; margin:8px 0;">|</div>
+        <div class="layer-label">工具与数据层</div>
+        <div class="arch-layer">
+          <div class="arch-node tool">MCP Server</div>
+          <div class="arch-node tool">RAG引擎</div>
+          <div class="arch-node data">向量数据库</div>
+          <div class="arch-node data">CRM系统</div>
+          <div class="arch-node data">知识库</div>
+          <div class="arch-node infra">消息队列</div>
+        </div>
+        <div style="text-align:center; color:var(--text-dim); font-size:1.5em; margin:8px 0;">|</div>
+        <div class="layer-label">治理与监控层</div>
+        <div class="arch-layer">
+          <div class="arch-node guard">权限校验</div>
+          <div class="arch-node guard">失败重试</div>
+          <div class="arch-node guard">人工接管</div>
+          <div class="arch-node guard">成本预算</div>
+          <div class="arch-node guard">调用日志</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>技术栈选型</h2>
+      <table class="governance-table">
+        <thead>
+          <tr><th>层级</th><th>组件</th><th>选型</th><th>选型理由</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="key">Agent框架</td><td>多Agent编排</td><td>LangGraph / AutoGen</td><td>支持状态机流转、循环依赖、人机协同</td></tr>
+          <tr><td class="key">LLM基座</td><td>大语言模型</td><td>Claude 3.5 / GPT-4o / 通义千问</td><td>长上下文、工具调用、中文理解</td></tr>
+          <tr><td class="key">RAG引擎</td><td>检索增强生成</td><td>LangChain + Chroma/Milvus</td><td>模块化RAG链路，支持混合检索</td></tr>
+          <tr><td class="key">向量数据库</td><td>Embedding存储</td><td>Milvus / Pinecone</td><td>高维向量检索、混合查询、分布式</td></tr>
+          <tr><td class="key">MCP协议</td><td>工具调用</td><td>Model Context Protocol</td><td>标准化LLM与外部工具交互协议</td></tr>
+          <tr><td class="key">消息队列</td><td>异步通信</td><td>Apache Kafka / RabbitMQ</td><td>高吞吐、持久化、Agent间解耦</td></tr>
+          <tr><td class="key">工作流引擎</td><td>审批流</td><td>Camunda / Flowable</td><td>BPMN 2.0标准、可视化设计</td></tr>
+          <tr><td class="key">CRM集成</td><td>数据回写</td><td>Salesforce API / 纷享销客OpenAPI</td><td>RESTful + Webhook双向同步</td></tr>
+          <tr><td class="key">监控</td><td>可观测性</td><td>Prometheus + Grafana + Jaeger</td><td>Metrics + Logs + Traces三支柱</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="flow" class="tab-panel">
+    <div class="card">
+      <h2>商机流转协同链路（端到端）</h2>
+
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-content">
+          <div class="flow-title">线索录入触发</div>
+          <div class="flow-desc">新线索从官网表单/展会/cold call进入系统 -> <span style="color:var(--accent)">线索评级Agent</span> 启动评分，输出 S/A/B/C/D 等级</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-content">
+          <div class="flow-title">客户画像构建</div>
+          <div class="flow-desc"><span style="color:var(--accent2)">客户画像Agent</span> 拉取CRM历史、邮件、会议记录 -> 生成360度画像 + 决策链图谱 -> 识别关键决策人</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-content">
+          <div class="flow-title">知识检索与方案生成</div>
+          <div class="flow-desc"><span style="color:var(--accent3)">知识检索Agent</span> 通过RAG召回相关产品文档、成功案例、竞品分析 -> 生成定制化方案话术</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-content">
+          <div class="flow-title">任务规划与分配</div>
+          <div class="flow-desc"><span style="color:var(--accent4)">任务规划Agent</span> 根据画像+知识输出 -> 生成跟进任务DAG（拜访->方案->报价->谈判）-> 自动分配执行人</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-content">
+          <div class="flow-title">工具执行落地</div>
+          <div class="flow-desc"><span style="color:var(--accent5)">工具执行Agent</span> 通过MCP调用邮件发送、日程创建、PPT生成、报价查询 -> 自动执行规划任务</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">6</div>
+        <div class="flow-content">
+          <div class="flow-title">质检与合规检查</div>
+          <div class="flow-desc"><span style="color:var(--accent6)">质检Agent</span> 扫描跟进记录、沟通内容、方案文档 -> 识别信息缺失/逻辑矛盾/合规风险 -> 生成质检报告</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">7</div>
+        <div class="flow-content">
+          <div class="flow-title">审批守卫校验</div>
+          <div class="flow-desc"><span style="color:var(--accent7)">审批守卫Agent</span> 对大额折扣/合同变更/客户转交 -> 匹配审批矩阵 -> 触发多级审批流 -> 记录审计日志</div>
+        </div>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-num">8</div>
+        <div class="flow-content">
+          <div class="flow-title">CRM数据回写</div>
+          <div class="flow-desc"><span style="color:var(--accent8)">CRM回写Agent</span> 将评分/画像/任务/质检结果 -> 结构化回写CRM -> 确保数据一致性与全链路可追溯</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>状态机流转模型</h2>
+      <pre class="code-block"><code><span class="comment"># 商机状态机定义 (State Machine)</span>
+<span class="keyword">class</span> <span class="function">OpportunityStateMachine</span>:
+    STATES = {
+        <span class="string">"NEW"</span>:        <span class="string">"新线索"</span>,
+        <span class="string">"SCORED"</span>:     <span class="string">"已评级"</span>,
+        <span class="string">"PROFILING"</span>:  <span class="string">"画像构建中"</span>,
+        <span class="string">"PLANNED"</span>:    <span class="string">"任务已规划"</span>,
+        <span class="string">"EXECUTING"</span>:  <span class="string">"执行中"</span>,
+        <span class="string">"QA_PASSED"</span>:  <span class="string">"质检通过"</span>,
+        <span class="string">"APPROVED"</span>:   <span class="string">"审批通过"</span>,
+        <span class="string">"WON"</span>:        <span class="string">"赢单"</span>,
+        <span class="string">"LOST"</span>:       <span class="string">"输单"</span>,
+        <span class="string">"HOLD"</span>:       <span class="string">"人工接管"</span>
+    }
+
+    TRANSITIONS = {
+        <span class="string">"NEW"</span>        -> [<span class="string">"SCORED"</span>],          <span class="comment"># 线索评级Agent</span>
+        <span class="string">"SCORED"</span>     -> [<span class="string">"PROFILING"</span>],       <span class="comment"># 客户画像Agent</span>
+        <span class="string">"PROFILING"</span>  -> [<span class="string">"PLANNED"</span>],         <span class="comment"># 任务规划Agent</span>
+        <span class="string">"PLANNED"</span>    -> [<span class="string">"EXECUTING"</span>],       <span class="comment"># 工具执行Agent</span>
+        <span class="string">"EXECUTING"</span>  -> [<span class="string">"QA_PASSED"</span>, <span class="string">"HOLD"</span>], <span class="comment"># 质检Agent / 人工接管</span>
+        <span class="string">"QA_PASSED"</span>  -> [<span class="string">"APPROVED"</span>, <span class="string">"HOLD"</span>],  <span class="comment"># 审批守卫Agent / 人工接管</span>
+        <span class="string">"APPROVED"</span>   -> [<span class="string">"WON"</span>, <span class="string">"LOST"</span>],      <span class="comment"># 最终状态</span>
+        <span class="string">"HOLD"</span>       -> [<span class="string">"EXECUTING"</span>, <span class="string">"LOST"</span>] <span class="comment"># 人工干预后恢复</span>
+    }</code></pre>
+    </div>
+  </div>
+
+  <div id="governance" class="tab-panel">
+    <div class="card">
+      <h2>链路治理八大机制</h2>
+      <table class="governance-table">
+        <thead>
+          <tr>
+            <th style="width:120px">治理机制</th>
+            <th style="width:180px">实现方案</th>
+            <th>详细设计</th>
+            <th style="width:100px">状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="key">RAG召回</td>
+            <td>混合检索 + 重排序</td>
+            <td>向量检索(Chroma/Milvus)召回Top-20 + BM25关键词检索召回Top-20 + Cross-Encoder重排序取Top-5 + 上下文压缩后送入LLM。支持多租户隔离，每个客户独立Namespace。Embedding模型采用bge-large-zh-v1.5，维度1024。</td>
+            <td><span class="status-tag status-ok">已设计</span></td>
+          </tr>
+          <tr>
+            <td class="key">MCP工具调用</td>
+            <td>标准化协议 + 工具注册中心</td>
+            <td>所有外部工具封装为MCP Server，统一Schema定义。Agent通过function_calling选择工具，执行结果经结构化解析后返回。工具注册中心维护可用工具列表、版本、健康状态。支持工具链组合调用。</td>
+            <td><span class="status-tag status-ok">已设计</span></td>
+          </tr>
+          <tr>
+            <td class="key">权限校验</td>
+            <td>RBAC + ABAC + 数据脱敏</td>
+            <td>基于角色的访问控制(RBAC)：销售/经理/管理员三级。基于属性的访问控制(ABAC)：客户敏感数据按角色脱敏。API网关层统一鉴权，JWT Token + OAuth2.0。字段级权限：客户手机号/预算金额等敏感字段需额外授权。</td>
+            <td><span class="status-tag status-ok">已设计</span></td>
+          </tr>
+          <tr>
+            <td class="key">失败重试</td>
+            <td>指数退避 + 死信队列</td>
+            <td>Agent调用失败时自动重试3次（间隔1s->2s->4s指数退避）。超过3次进入死信队列(DLQ)，触发告警通知运维。可配置不同Agent的重试策略。支持熔断：连续失败10次自动熔断，人工介入后恢复。</td>
+            <td><span class="status-tag status-ok">已设计</span></td>
+          </tr>
+          <tr>
+            <td class="key">人工接管</td>
+            <td>置信度阈值 + 审批流</td>
+            <td>Agent输出置信度小于0.7时自动触发人工审核。高风险操作（折扣大于30%、合同金额大于100万、客户转交）强制人工确认。人工接管界面展示：Agent推理过程、原始数据、建议操作、一键同意/驳回/修改。接管记录存入审计日志，用于后续模型微调。</td>
+            <td><span class="status-tag status-warn">待细化</span></td>
+          </tr>
+          <tr>
+            <td class="key">成本预算</td>
+            <td>Token配额 + 模型路由</td>
+            <td>按商机/按销售设置月度Token预算（如：每个商机最多消耗2美元，每个销售每月50美元）。成本超限自动降级：GPT-4o -> Claude 3.5 Haiku -> 本地模型。实时成本看板：每个Agent调用次数、Token消耗、费用明细。成本预警：达到80%预算时告警，100%时自动降级。</td>
+            <td><span class="status-tag status-ok">已设计</span></td>
+          </tr>
+          <tr>
+            <td class="key">调用日志</td>
+            <td>全链路追踪 + 结构化日志</td>
+            <td>每个商机流转生成唯一TraceID，贯穿所有Agent调用。结构化日志字段：timestamp、trace_id、agent_name、input_hash、output_hash、latency_ms、token_count、cost_usd、status、error_msg。日志保留90天，冷数据归档S3。支持按商机/按销售/按Agent维度查询。</td>
+            <td><span class="status-tag status-ok">已设计</span></td>
+          </tr>
+          <tr>
+            <td class="key">黄金样本</td>
+            <td>200条端到端测试集</td>
+            <td>覆盖8大Agent x 5大场景 x 5条边界案例 = 200条。每条样本包含：输入上下文、预期Agent调用链、预期输出、预期CRM回写字段。自动化回归测试：每次模型更新/代码发布前全量跑200条样本，通过率大于95%方可上线。样本持续积累：人工审核的优秀案例自动入库。</td>
+            <td><span class="status-tag status-warn">待补充</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>成本预算控制模型</h2>
+      <pre class="code-block"><code><span class="comment"># 成本预算控制伪代码</span>
+<span class="keyword">class</span> <span class="function">CostController</span>:
+    BUDGET_PER_OPPORTUNITY = <span class="number">2.0</span>   <span class="comment"># 美元/商机</span>
+    BUDGET_PER_SALES = <span class="number">50.0</span>       <span class="comment"># 美元/销售/月</span>
+
+    MODEL_TIERS = [
+        { <span class="string">"model"</span>: <span class="string">"gpt-4o"</span>,        <span class="string">"cost_per_1k"</span>: <span class="number">0.005</span>, <span class="string">"quality"</span>: <span class="number">1.0</span> },
+        { <span class="string">"model"</span>: <span class="string">"claude-3.5-sonnet"</span>, <span class="string">"cost_per_1k"</span>: <span class="number">0.003</span>, <span class="string">"quality"</span>: <span class="number">0.95</span> },
+        { <span class="string">"model"</span>: <span class="string">"qwen2.5-72b"</span>,   <span class="string">"cost_per_1k"</span>: <span class="number">0.001</span>, <span class="string">"quality"</span>: <span class="number">0.85</span> },
+        { <span class="string">"model"</span>: <span class="string">"local-llm"</span>,     <span class="string">"cost_per_1k"</span>: <span class="number">0.0001</span>, <span class="string">"quality"</span>: <span class="number">0.7</span> }
+    ]
+
+    <span class="keyword">def</span> <span class="function">select_model</span>(self, remaining_budget, required_quality):
+        <span class="keyword">for</span> tier <span class="keyword">in</span> self.MODEL_TIERS:
+            <span class="keyword">if</span> tier[<span class="string">"quality"</span>] >= required_quality <span class="keyword">and</span> \
+               self.estimate_cost(tier) <= remaining_budget:
+                <span class="keyword">return</span> tier[<span class="string">"model"</span>]
+        <span class="keyword">return</span> <span class="string">"local-llm"</span>  <span class="comment"># 兜底本地模型</span>
+
+    <span class="keyword">def</span> <span class="function">check_budget</span>(self, sales_id, opportunity_id):
+        used = self.get_monthly_usage(sales_id)
+        <span class="keyword">if</span> used >= self.BUDGET_PER_SALES * <span class="number">0.8</span>:
+            self.send_alert(sales_id, <span class="string">"预算使用达80%"</span>)
+        <span class="keyword">if</span> used >= self.BUDGET_PER_SALES:
+            <span class="keyword">return</span> <span class="string">"FORCE_DEGRADE"</span>
+        <span class="keyword">return</span> <span class="string">"OK"</span></code></pre>
+    </div>
+  </div>
+
+  <div id="samples" class="tab-panel">
+    <div class="card">
+      <h2>200条黄金样本设计（精选展示）</h2>
+      <p style="color:var(--text-dim); margin-bottom:20px;">样本覆盖8大Agent x 5大场景（新客开发、老客户增购、竞品替换、合同续约、丢单挽回）x 5条边界案例 = 200条。每条样本包含完整输入上下文、预期Agent调用链、预期输出、预期CRM回写字段。</p>
+
+      <div class="sample-card">
+        <div class="sample-id">样本 #001 | 场景：新客开发 | Agent：线索评级Agent</div>
+        <div class="sample-scenario">某制造业企业（500人规模）通过官网下载了产品白皮书，留资信息包含：姓名、手机、公司名、职位（IT总监）。过去7天访问了定价页3次、竞品对比页2次。</div>
+        <div class="sample-flow">
+          <span>线索评级Agent</span> -> 调用企业征信API查询公司规模/融资/行业 -> 结合行为数据（定价页高频访问=高意向）-> 输出：评分 <span>87分</span>，等级 <span>A级</span>，分配建议 <span>分配给资深销售张三</span>，跟进 urgency <span>24小时内</span><br>
+          CRM回写：lead_score=87, lead_grade="A", assigned_to="张三", follow_up_deadline="2026-07-19T18:00:00"
+        </div>
+      </div>
+
+      <div class="sample-card">
+        <div class="sample-id">样本 #042 | 场景：老客户增购 | Agent：客户画像Agent -> 知识检索Agent</div>
+        <div class="sample-scenario">客户"华创科技"已购买基础版SaaS（50账号），合同即将到期。销售李四发现对方CTO近期参加了3场行业峰会，内部邮件提到"数据安全合规"和"API开放"关键词。</div>
+        <div class="sample-flow">
+          <span>客户画像Agent</span> -> 聚合CRM记录+邮件+会议 -> 识别增购信号：CTO关注安全合规、API开放=可能需企业版<br>
+          <span>知识检索Agent</span> -> RAG召回"企业版安全白皮书""API开放平台文档""同行业增购案例（3个）"<br>
+          输出：画像更新（增购概率 <span>75%</span>），推荐话术 <span>"贵司CTO关注的数据安全合规，我们的企业版已通过等保三级..."</span>，关联案例 <span>"某同规模客户增购后效率提升40%"</span><br>
+          CRM回写：upsell_probability=0.75, recommended_products=["企业版","API开放平台"], next_action="预约CTO演示"
+        </div>
+      </div>
+
+      <div class="sample-card">
+        <div class="sample-id">样本 #089 | 场景：竞品替换 | Agent：任务规划Agent -> 工具执行Agent -> 质检Agent</div>
+        <div class="sample-scenario">客户"云帆物流"目前使用Salesforce，因数据合规要求需迁移到国产CRM。销售王五已获取对方当前使用模块清单和痛点（报表慢、移动端差）。</div>
+        <div class="sample-flow">
+          <span>任务规划Agent</span> -> 生成任务DAG：①数据迁移评估(2天) ②POC环境搭建(3天) ③报表性能对比演示(1天) ④移动端体验会(1天) ⑤报价与合同谈判(5天)<br>
+          <span>工具执行Agent</span> -> MCP调用：创建POC项目空间 -> 发送迁移评估问卷 -> 预约演示会议室 -> 生成对比PPT（自动填充Salesforce vs 国产CRM功能对照表）<br>
+          <span>质检Agent</span> -> 检查PPT中竞品对比描述是否合规（无贬低性用语）-> 检查报价是否含隐藏费用 -> 输出：质检评分 <span>92分</span>，通过<br>
+          CRM回写：opportunity_stage="POC", tasks=[...], next_meeting="2026-07-22T14:00:00"
+        </div>
+      </div>
+
+      <div class="sample-card">
+        <div class="sample-id">样本 #156 | 场景：大额折扣审批 | Agent：审批守卫Agent（边界案例）</div>
+        <div class="sample-scenario">销售赵六申请对"星辰集团"（年合同额200万）给予35%折扣，理由是"竞品报价比我们低30%"。该客户历史折扣率最高15%。</div>
+        <div class="sample-flow">
+          <span>审批守卫Agent</span> -> 校验：折扣率35% > 阈值30% -> 触发 <span>强制人工审批</span><br>
+          自动收集支撑材料：竞品报价截图（OCR识别）、客户预算审批邮件、历史成交折扣率统计<br>
+          生成审批包：折扣申请单 + 支撑材料 + 风险分析（"该客户为战略客户，丢单影响Q3业绩15%"）<br>
+          路由至：销售总监 -> CFO -> CEO（三级审批）<br>
+          CRM回写：approval_status="PENDING", approval_chain=["总监","CFO","CEO"], risk_level="HIGH"
+        </div>
+      </div>
+
+      <div class="sample-card">
+        <div class="sample-id">样本 #200 | 场景：人工接管（边界案例）</div>
+        <div class="sample-scenario">某商机在执行过程中，客户突然提出"需要定制开发一个行业专属模块"，该需求超出标准产品范围，且涉及技术可行性评估。</div>
+        <div class="sample-flow">
+          <span>任务规划Agent</span> -> 检测到需求关键词"定制开发" -> 置信度 <span>0.45</span>（低于0.7阈值）<br>
+          自动触发 <span>人工接管</span>：通知产品经理+技术负责人+销售经理进入协同群<br>
+          系统预填充：客户需求摘要、预估工时（基于历史类似需求）、成本估算、风险评估<br>
+          人工决策后：选择"接受定制"-> 任务规划Agent重新生成含定制开发的任务DAG；选择"拒绝"-> 知识检索Agent推荐替代方案<br>
+          CRM回写：status="HOLD->RESOLVED", resolution="接受定制/拒绝", custom_dev_flag=true/false
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>样本分类统计</h3>
+      <table class="governance-table">
+        <thead>
+          <tr><th>场景</th><th>样本数</th><th>覆盖Agent</th><th>关键测试点</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>新客开发</td><td>40条</td><td>线索评级+画像+知识检索</td><td>线索评分准确性、画像完整性</td></tr>
+          <tr><td>老客户增购</td><td>40条</td><td>画像+知识检索+任务规划</td><td>增购信号识别、方案推荐 relevance</td></tr>
+          <tr><td>竞品替换</td><td>40条</td><td>知识检索+任务规划+工具执行</td><td>竞品对比准确性、POC流程完整性</td></tr>
+          <tr><td>合同续约</td><td>40条</td><td>画像+审批守卫+CRM回写</td><td>续约风险预警、折扣审批合规</td></tr>
+          <tr><td>丢单挽回</td><td>40条</td><td>全链路8个Agent</td><td>丢因分析、挽回策略、人工接管</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tech" class="tab-panel">
+    <div class="card">
+      <h2>Agent编排核心代码</h2>
+      <pre class="code-block"><code><span class="comment"># LangGraph 多Agent编排示例</span>
+<span class="keyword">from</span> langgraph.graph <span class="keyword">import</span> StateGraph, END
+<span class="keyword">from</span> typing <span class="keyword">import</span> TypedDict
+
+<span class="keyword">class</span> <span class="function">OpportunityState</span>(TypedDict):
+    opportunity_id: <span class="keyword">str</span>
+    current_stage: <span class="keyword">str</span>
+    lead_data: <span class="keyword">dict</span>
+    customer_profile: <span class="keyword">dict</span>
+    knowledge_results: <span class="keyword">list</span>
+    task_plan: <span class="keyword">list</span>
+    tool_results: <span class="keyword">list</span>
+    qa_report: <span class="keyword">dict</span>
+    approval_result: <span class="keyword">dict</span>
+    crm_writeback: <span class="keyword">dict</span>
+    confidence: <span class="keyword">float</span>
+    requires_human: <span class="keyword">bool</span>
+    cost_accumulated: <span class="keyword">float</span>
+
+<span class="comment"># 定义Agent节点</span>
+<span class="keyword">def</span> <span class="function">lead_scoring_agent</span>(state: OpportunityState):
+    score, grade = scoring_engine.evaluate(state[<span class="string">"lead_data"</span>])
+    cost = token_tracker.track(<span class="string">"lead_scoring"</span>)
+    <span class="keyword">return</span> {
+        <span class="string">"current_stage"</span>: <span class="string">"SCORED"</span>,
+        <span class="string">"confidence"</span>: score / <span class="number">100</span>,
+        <span class="string">"cost_accumulated"</span>: state[<span class="string">"cost_accumulated"</span>] + cost
+    }
+
+<span class="keyword">def</span> <span class="function">customer_profiling_agent</span>(state: OpportunityState):
+    profile = profile_builder.build(state[<span class="string">"opportunity_id"</span>])
+    cost = token_tracker.track(<span class="string">"profiling"</span>)
+    <span class="keyword">return</span> {
+        <span class="string">"customer_profile"</span>: profile,
+        <span class="string">"current_stage"</span>: <span class="string">"PROFILING"</span>,
+        <span class="string">"cost_accumulated"</span>: state[<span class="string">"cost_accumulated"</span>] + cost
+    }
+
+<span class="keyword">def</span> <span class="function">knowledge_retrieval_agent</span>(state: OpportunityState):
+    results = rag_engine.retrieve(
+        query=state[<span class="string">"customer_profile"</span>][<span class="string">"current_needs"</span>],
+        top_k=<span class="number">5</span>,
+        namespace=state[<span class="string">"opportunity_id"</span>]
+    )
+    cost = token_tracker.track(<span class="string">"retrieval"</span>)
+    <span class="keyword">return</span> {
+        <span class="string">"knowledge_results"</span>: results,
+        <span class="string">"cost_accumulated"</span>: state[<span class="string">"cost_accumulated"</span>] + cost
+    }
+
+<span class="keyword">def</span> <span class="function">human_takeover_guard</span>(state: OpportunityState):
+    <span class="keyword">if</span> state[<span class="string">"confidence"</span>] < <span class="number">0.7</span> <span class="keyword">or</span> state[<span class="string">"cost_accumulated"</span>] > <span class="number">2.0</span>:
+        <span class="keyword">return</span> {<span class="string">"requires_human"</span>: <span class="keyword">True</span>, <span class="string">"current_stage"</span>: <span class="string">"HOLD"</span>}
+    <span class="keyword">return</span> {<span class="string">"requires_human"</span>: <span class="keyword">False</span>}
+
+<span class="comment"># 构建状态机图</span>
+workflow = StateGraph(OpportunityState)
+workflow.add_node(<span class="string">"lead_scoring"</span>, lead_scoring_agent)
+workflow.add_node(<span class="string">"profiling"</span>, customer_profiling_agent)
+workflow.add_node(<span class="string">"knowledge"</span>, knowledge_retrieval_agent)
+workflow.add_node(<span class="string">"planning"</span>, task_planning_agent)
+workflow.add_node(<span class="string">"execution"</span>, tool_execution_agent)
+workflow.add_node(<span class="string">"qa"</span>, quality_assurance_agent)
+workflow.add_node(<span class="string">"approval"</span>, approval_guard_agent)
+workflow.add_node(<span class="string">"crm_writeback"</span>, crm_writeback_agent)
+workflow.add_node(<span class="string">"human"</span>, human_takeover_node)
+
+<span class="comment"># 定义流转边</span>
+workflow.set_entry_point(<span class="string">"lead_scoring"</span>)
+workflow.add_edge(<span class="string">"lead_scoring"</span>, <span class="string">"profiling"</span>)
+workflow.add_edge(<span class="string">"profiling"</span>, <span class="string">"knowledge"</span>)
+workflow.add_edge(<span class="string">"knowledge"</span>, <span class="string">"planning"</span>)
+workflow.add_edge(<span class="string">"planning"</span>, <span class="string">"execution"</span>)
+workflow.add_edge(<span class="string">"execution"</span>, <span class="string">"qa"</span>)
+
+<span class="comment"># 条件分支：质检通过->审批，不通过->人工</span>
+workflow.add_conditional_edges(
+    <span class="string">"qa"</span>,
+    <span class="keyword">lambda</span> s: <span class="string">"approval"</span> <span class="keyword">if</span> s[<span class="string">"qa_report"</span>][<span class="string">"passed"</span>] <span class="keyword">else</span> <span class="string">"human"</span>
+)
+workflow.add_conditional_edges(
+    <span class="string">"approval"</span>,
+    <span class="keyword">lambda</span> s: <span class="string">"crm_writeback"</span> <span class="keyword">if</span> s[<span class="string">"approval_result"</span>][<span class="string">"approved"</span>] <span class="keyword">else</span> <span class="string">"human"</span>
+)
+workflow.add_edge(<span class="string">"crm_writeback"</span>, END)
+workflow.add_edge(<span class="string">"human"</span>, END)
+
+app = workflow.compile()</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>MCP工具调用示例</h2>
+      <pre class="code-block"><code><span class="comment"># MCP Server 注册与调用</span>
+<span class="keyword">class</span> <span class="function">MCPToolRegistry</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(self):
+        self.tools = {}
+
+    <span class="keyword">def</span> <span class="function">register</span>(self, name, schema, handler):
+        self.tools[name] = {<span class="string">"schema"</span>: schema, <span class="string">"handler"</span>: handler}
+
+    <span class="keyword">def</span> <span class="function">execute</span>(self, name, params):
+        <span class="keyword">if</span> name <span class="keyword">not in</span> self.tools:
+            <span class="keyword">raise</span> ToolNotFoundError(name)
+        <span class="keyword">return</span> self.tools[name][<span class="string">"handler"</span>](**params)
+
+<span class="comment"># 注册CRM工具</span>
+registry = MCPToolRegistry()
+registry.register(
+    name=<span class="string">"crm_update_opportunity"</span>,
+    schema={
+        <span class="string">"type"</span>: <span class="string">"object"</span>,
+        <span class="string">"properties"</span>: {
+            <span class="string">"opportunity_id"</span>: {<span class="string">"type"</span>: <span class="string">"string"</span>},
+            <span class="string">"stage"</span>: {<span class="string">"type"</span>: <span class="string">"string"</span>, <span class="string">"enum"</span>: [<span class="string">"NEW"</span>,<span class="string">"SCORED"</span>,<span class="string">"WON"</span>,<span class="string">"LOST"</span>]},
+            <span class="string">"fields"</span>: {<span class="string">"type"</span>: <span class="string">"object"</span>}
+        },
+        <span class="string">"required"</span>: [<span class="string">"opportunity_id"</span>, <span class="string">"fields"</span>]
+    },
+    handler=crm_api.update_opportunity
+)
+
+<span class="comment"># Agent调用工具</span>
+<span class="keyword">def</span> <span class="function">tool_execution_agent</span>(state):
+    plan = state[<span class="string">"task_plan"</span>]
+    results = []
+    <span class="keyword">for</span> task <span class="keyword">in</span> plan:
+        tool_name = task[<span class="string">"tool"</span>]
+        params = task[<span class="string">"params"</span>]
+        <span class="keyword">try</span>:
+            result = retry_with_backoff(
+                <span class="keyword">lambda</span>: registry.execute(tool_name, params),
+                max_retries=<span class="number">3</span>
+            )
+            results.append({<span class="string">"task"</span>: task, <span class="string">"status"</span>: <span class="string">"success"</span>, <span class="string">"result"</span>: result})
+        <span class="keyword">except</span> Exception <span class="keyword">as</span> e:
+            results.append({<span class="string">"task"</span>: task, <span class="string">"status"</span>: <span class="string">"failed"</span>, <span class="string">"error"</span>: <span class="keyword">str</span>(e)})
+            <span class="keyword">if</span> task[<span class="string">"critical"</span>]:
+                <span class="keyword">return</span> {<span class="string">"requires_human"</span>: <span class="keyword">True</span>, <span class="string">"error"</span>: <span class="keyword">str</span>(e)}
+    <span class="keyword">return</span> {<span class="string">"tool_results"</span>: results}</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>RAG召回链路设计</h2>
+      <pre class="code-block"><code><span class="comment"># RAG Pipeline: 混合检索 + 重排序</span>
+<span class="keyword">class</span> <span class="function">RAGPipeline</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(self):
+        self.vector_store = MilvusClient(uri=<span class="string">"milvus://localhost:19530"</span>)
+        self.embedder = SentenceTransformer(<span class="string">"BAAI/bge-large-zh-v1.5"</span>)
+        self.reranker = CrossEncoder(<span class="string">"BAAI/bge-reranker-large"</span>)
+        self.bm25_index = BM25Index(corpus=knowledge_corpus)
+
+    <span class="keyword">def</span> <span class="function">retrieve</span>(self, query: <span class="keyword">str</span>, namespace: <span class="keyword">str</span>, top_k: <span class="keyword">int</span> = <span class="number">5</span>):
+        <span class="comment"># Step 1: 向量检索</span>
+        query_vec = self.embedder.encode(query, normalize_embeddings=<span class="keyword">True</span>)
+        vec_results = self.vector_store.search(
+            collection_name=<span class="string">f"knowledge_{namespace}"</span>,
+            data=[query_vec],
+            limit=<span class="number">20</span>,
+            output_fields=[<span class="string">"content"</span>, <span class="string">"source"</span>, <span class="string">"metadata"</span>]
+        )
+
+        <span class="comment"># Step 2: BM25关键词检索</span>
+        bm25_results = self.bm25_index.search(query, top_k=<span class="number">20</span>)
+
+        <span class="comment"># Step 3: 结果融合去重 (RRF)</span>
+        fused = self.reciprocal_rank_fusion(vec_results, bm25_results)
+
+        <span class="comment"># Step 4: Cross-Encoder重排序</span>
+        pairs = [(query, doc[<span class="string">"content"</span>]) <span class="keyword">for</span> doc <span class="keyword">in</span> fused]
+        scores = self.reranker.predict(pairs)
+        <span class="keyword">for</span> doc, score <span class="keyword">in</span> <span class="keyword">zip</span>(fused, scores):
+            doc[<span class="string">"rerank_score"</span>] = score
+
+        <span class="comment"># Step 5: 取Top-K并上下文压缩</span>
+        top_results = <span class="keyword">sorted</span>(fused, key=<span class="keyword">lambda</span> x: x[<span class="string">"rerank_score"</span>], reverse=<span class="keyword">True</span>)[:top_k]
+        compressed = self.context_compressor.compress(top_results, max_tokens=<span class="number">4000</span>)
+
+        <span class="keyword">return</span> compressed</code></pre>
+    </div>
+  </div>
+
+  <!-- ===== 业务结果 Tab ===== -->
+  <div id="results" class="tab-panel">
+    <div class="card">
+      <h2>🏆 试点业务成效</h2>
+      <p style="color:var(--text-dim); margin-bottom:24px;">在某大型制造企业销售团队（30人）试点运行3个月，对比人工模式与Agent协同模式的关键指标：</p>
+
+      <!-- 三大核心指标 -->
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;">
+        <div style="background:linear-gradient(135deg, rgba(56,189,248,0.08), rgba(56,189,248,0.02)); border:1px solid rgba(56,189,248,0.2); border-radius:14px; padding:22px; text-align:center;">
+          <div style="font-size:0.8em; color:var(--text-dim); margin-bottom:6px;">资料检索与复盘初稿</div>
+          <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; margin-bottom:4px;">
+            <span style="font-size:2.4em; font-weight:900; color:var(--accent);">35</span>
+            <span style="font-size:1em; color:var(--accent);">分钟</span>
+          </div>
+          <div style="font-size:0.78em; color:var(--success);">↓ 从 2 小时缩短，提效 <strong>71%</strong></div>
+        </div>
+        <div style="background:linear-gradient(135deg, rgba(52,211,153,0.08), rgba(52,211,153,0.02)); border:1px solid rgba(52,211,153,0.2); border-radius:14px; padding:22px; text-align:center;">
+          <div style="font-size:0.8em; color:var(--text-dim); margin-bottom:6px;">复杂任务一次通过率</div>
+          <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; margin-bottom:4px;">
+            <span style="font-size:2.4em; font-weight:900; color:var(--accent3);">76</span>
+            <span style="font-size:1em; color:var(--accent3);">%</span>
+          </div>
+          <div style="font-size:0.78em; color:var(--success);">↑ 较人工模式 <strong>48%</strong> 提升 28 个百分点</div>
+        </div>
+        <div style="background:linear-gradient(135deg, rgba(251,191,36,0.08), rgba(251,191,36,0.02)); border:1px solid rgba(251,191,36,0.2); border-radius:14px; padding:22px; text-align:center;">
+          <div style="font-size:0.8em; color:var(--text-dim); margin-bottom:6px;">商机推进可视率</div>
+          <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; margin-bottom:4px;">
+            <span style="font-size:2.4em; font-weight:900; color:var(--accent5);">100</span>
+            <span style="font-size:1em; color:var(--accent5);">%</span>
+          </div>
+          <div style="font-size:0.78em; color:var(--success);">全链路状态实时可追踪、可审计</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 前后对比表 -->
+    <div class="card">
+      <h2>📊 人工模式 vs Agent协同 对比</h2>
+      <table class="governance-table">
+        <thead>
+          <tr><th>维度</th><th>人工模式（改造前）</th><th>Agent协同（改造后）</th><th>提升幅度</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="key">资料检索与复盘</td>
+            <td>~120 分钟 / 次<br><span style="color:var(--text-dim); font-size:0.85em;">手动翻查CRM、邮件、文档</span></td>
+            <td>~35 分钟 / 次<br><span style="color:var(--text-dim); font-size:0.85em;">RAG自动检索 + 多Agent并行</span></td>
+            <td><span class="status-tag status-ok">↓ 71%</span></td>
+          </tr>
+          <tr>
+            <td class="key">客户画像生成</td>
+            <td>~45 分钟 / 客户<br><span style="color:var(--text-dim); font-size:0.85em;">跨系统手工汇总</span></td>
+            <td>~5 分钟 / 客户<br><span style="color:var(--text-dim); font-size:0.85em;">画像Agent自动聚合多源数据</span></td>
+            <td><span class="status-tag status-ok">↓ 89%</span></td>
+          </tr>
+          <tr>
+            <td class="key">线索评级准确率</td>
+            <td>~62%<br><span style="color:var(--text-dim); font-size:0.85em;">依赖个人经验判断</span></td>
+            <td>~88%<br><span style="color:var(--text-dim); font-size:0.85em;">多维度评分模型 + 历史数据</span></td>
+            <td><span class="status-tag status-ok">↑ 26pp</span></td>
+          </tr>
+          <tr>
+            <td class="key">复杂任务一次通过率</td>
+            <td>48%<br><span style="color:var(--text-dim); font-size:0.85em;">反复修改、多轮返工</span></td>
+            <td>76%<br><span style="color:var(--text-dim); font-size:0.85em;">质检Agent前置 + 审批守卫校验</span></td>
+            <td><span class="status-tag status-ok">↑ 28pp</span></td>
+          </tr>
+          <tr>
+            <td class="key">商机推进透明度</td>
+            <td>信息孤岛<br><span style="color:var(--text-dim); font-size:0.85em;">跟进记录分散、不可追踪</span></td>
+            <td>100% 可追踪<br><span style="color:var(--text-dim); font-size:0.85em;">CRM回写 + 审计日志全链路</span></td>
+            <td><span class="status-tag status-ok">全覆盖</span></td>
+          </tr>
+          <tr>
+            <td class="key">质检覆盖率</td>
+            <td>~15%（抽查）<br><span style="color:var(--text-dim); font-size:0.85em;">人工抽检，覆盖面窄</span></td>
+            <td>100%（全量）<br><span style="color:var(--text-dim); font-size:0.85em;">质检Agent自动扫描全部记录</span></td>
+            <td><span class="status-tag status-ok">↑ 85pp</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 覆盖范围 -->
+    <div class="card">
+      <h2>🔗 平台覆盖范围</h2>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+        <div style="background:var(--card-hover); border-radius:10px; padding:16px; text-align:center; border:1px solid var(--border);">
+          <div style="font-size:1.8em; font-weight:900; color:var(--accent);">8</div>
+          <div style="font-size:0.8em; color:var(--text-dim);">智能Agent角色</div>
+        </div>
+        <div style="background:var(--card-hover); border-radius:10px; padding:16px; text-align:center; border:1px solid var(--border);">
+          <div style="font-size:1.8em; font-weight:900; color:var(--accent2);">200</div>
+          <div style="font-size:0.8em; color:var(--text-dim);">条黄金样本</div>
+        </div>
+        <div style="background:var(--card-hover); border-radius:10px; padding:16px; text-align:center; border:1px solid var(--border);">
+          <div style="font-size:1.8em; font-weight:900; color:var(--accent3);">5</div>
+          <div style="font-size:0.8em; color:var(--text-dim);">大业务场景覆盖</div>
+        </div>
+        <div style="background:var(--card-hover); border-radius:10px; padding:16px; text-align:center; border:1px solid var(--border);">
+          <div style="font-size:1.8em; font-weight:900; color:var(--accent5);">9</div>
+          <div style="font-size:0.8em; color:var(--text-dim);">项链路治理能力</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 动态评级分布 -->
+    <div class="card" id="distroCard">
+      <h2>📊 实时评级分布 <span style="font-size:0.7em;color:var(--text-dim);font-weight:400;">（随提交动态更新）</span></h2>
+      <div class="distro-panel" id="distroPanel">
+        <div class="distro-row"><span class="distro-grade S">S</span><div class="distro-bar-wrap"><div class="distro-bar-fill S" id="distroBarS" style="width:0%"></div></div><span class="distro-count" id="distroCountS">0</span><span class="distro-pct" id="distroPctS">0%</span></div>
+        <div class="distro-row"><span class="distro-grade A">A</span><div class="distro-bar-wrap"><div class="distro-bar-fill A" id="distroBarA" style="width:0%"></div></div><span class="distro-count" id="distroCountA">0</span><span class="distro-pct" id="distroPctA">0%</span></div>
+        <div class="distro-row"><span class="distro-grade B">B</span><div class="distro-bar-wrap"><div class="distro-bar-fill B" id="distroBarB" style="width:0%"></div></div><span class="distro-count" id="distroCountB">0</span><span class="distro-pct" id="distroPctB">0%</span></div>
+        <div class="distro-row"><span class="distro-grade C">C</span><div class="distro-bar-wrap"><div class="distro-bar-fill C" id="distroBarC" style="width:0%"></div></div><span class="distro-count" id="distroCountC">0</span><span class="distro-pct" id="distroPctC">0%</span></div>
+        <div class="distro-row"><span class="distro-grade D">D</span><div class="distro-bar-wrap"><div class="distro-bar-fill D" id="distroBarD" style="width:0%"></div></div><span class="distro-count" id="distroCountD">0</span><span class="distro-pct" id="distroPctD">0%</span></div>
+        <div class="distro-summary">累计 <strong id="distroTotal">0</strong> 条 | 平均评分 <strong id="distroAvg">—</strong> | S/A 级占比 <strong id="distroSA">—</strong></div>
+      </div>
+    </div>
+
+    <!-- 累计回写日志摘要 -->
+    <div class="card" id="summaryLogCard">
+      <h2>📋 累计回写日志 <span style="font-size:0.7em;color:var(--text-dim);font-weight:400;" id="summaryLogCount">共 0 条</span></h2>
+      <div class="log-table-wrap" style="max-height:360px;">
+        <table class="log-table">
+          <thead>
+            <tr><th>#</th><th>时间</th><th>客户</th><th>公司</th><th>行业</th><th>场景</th><th>评级</th><th>评分</th><th>审计ID</th></tr>
+          </thead>
+          <tbody id="summaryLogBody">
+            <tr><td colspan="9" class="log-empty">暂无回写记录，请在右下角「提交资料」中提交客户信息</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 关键结论 -->
+    <div class="card">
+      <h2>💡 关键结论</h2>
+      <div class="sample-card">
+        <div class="sample-id">结论 1</div>
+        <div class="sample-scenario">多Agent协同显著压缩端到端耗时</div>
+        <div class="sample-flow">8个Agent流水线并行处理线索评级、画像构建、知识检索、任务规划、工具执行、质检、审批、回写，将原本串行的<span>2小时人工流程</span>压缩至<span>35分钟</span>，提效71%。</div>
+      </div>
+      <div class="sample-card">
+        <div class="sample-id">结论 2</div>
+        <div class="sample-scenario">质检前置 + 审批守卫有效提升一次通过率</div>
+        <div class="sample-flow">质检Agent在任务执行后自动扫描信息完整性与合规性，审批守卫Agent拦截不合规操作，复杂任务一次通过率从<span>48%提升至76%</span>（+28个百分点），减少返工轮次。</div>
+      </div>
+      <div class="sample-card">
+        <div class="sample-id">结论 3</div>
+        <div class="sample-scenario">CRM回写消除信息孤岛</div>
+        <div class="sample-flow">CRM回写Agent将各Agent产出结构化写入CRM，配合<span>权限校验、失败重试、调用日志</span>三道防线，实现<span>100%商机状态可追踪</span>，管理层可实时查看全团队商机健康度。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(tabId) {
+  document.querySelectorAll('.tab-panel').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ==================== 提交资料对话框 ====================
+
+// 模拟上传文件列表
+let uploadedFiles = [];
+
+// 累计提交日志
+let submissionLog = [];
+
+function openSubmitModal() {
+  document.getElementById('submitModal').classList.remove('hidden');
+  document.getElementById('resultPanel').classList.add('hidden');
+  document.getElementById('ratingCard').classList.add('hidden');
+  document.getElementById('agentOutputs').classList.add('hidden');
+  document.getElementById('timeSavedBanner').classList.add('hidden');
+  // 日志表：首次提交前隐藏，提交过就保持可见
+  if (submissionLog.length === 0) {
+    document.getElementById('logSection').classList.add('hidden');
+  }
+  document.getElementById('submitForm').reset();
+  uploadedFiles = [];
+  renderFileList();
+  resetWorkflowSteps();
+}
+
+function closeSubmitModal() {
+  document.getElementById('submitModal').classList.add('hidden');
+}
+
+// 点击遮罩关闭
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'submitModal') closeSubmitModal();
+});
+
+// 文件上传模拟
+function triggerFileUpload() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.accept = '.pdf,.doc,.docx,.xlsx,.pptx,.jpg,.png,.txt';
+  input.onchange = function(e) {
+    for (const file of e.target.files) {
+      if (!uploadedFiles.find(f => f.name === file.name)) {
+        uploadedFiles.push({ name: file.name, size: file.size });
+      }
+    }
+    renderFileList();
+  };
+  input.click();
+}
+
+function removeFile(name) {
+  uploadedFiles = uploadedFiles.filter(f => f.name !== name);
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  if (uploadedFiles.length === 0) {
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = uploadedFiles.map(f =>
+    `<span class="upload-file-tag">${f.name} <span class="remove-file" onclick="removeFile('${f.name}')">×</span></span>`
+  ).join('');
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// 重置工作流步骤
+function resetWorkflowSteps() {
+  document.querySelectorAll('.workflow-step-item').forEach(el => {
+    el.classList.remove('active', 'done');
+    el.querySelector('.wf-step-icon').className = 'wf-step-icon pending';
+    el.querySelector('.wf-step-icon').textContent = el.querySelector('.wf-step-icon').dataset.idx;
+    el.querySelector('.wf-step-status').className = 'wf-step-status';
+    el.querySelector('.wf-step-status').textContent = '等待中';
+  });
+}
+
+// 提交资料 → 启动工作流评级
+function submitMaterials() {
+  const form = document.getElementById('submitForm');
+  const customerName = form.customerName.value.trim();
+  const companyName = form.companyName.value.trim();
+  const requirements = form.requirements.value.trim();
+
+  if (!customerName || !companyName || !requirements) {
+    alert('请填写必填字段：客户名称、公司名称、需求描述');
+    return;
+  }
+
+  // 收集表单数据
+  const formData = {
+    customerName,
+    companyName,
+    industry: form.industry.value,
+    contact: form.contact.value,
+    source: form.source.value,
+    requirements,
+    budget: form.budget.value,
+    timeline: form.timeline.value,
+    files: uploadedFiles.map(f => f.name)
+  };
+
+  // 显示结果面板
+  document.getElementById('resultPanel').classList.remove('hidden');
+  document.getElementById('ratingCard').classList.add('hidden');
+  document.getElementById('submitBtn').disabled = true;
+  resetWorkflowSteps();
+
+  // 滚动到结果面板
+  document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // 模拟工作流步骤推进（8个Agent协同）
+  const steps = [
+    { idx: 1, delay: 400,  duration: 1200 },
+    { idx: 2, delay: 1700, duration: 1100 },
+    { idx: 3, delay: 2900, duration: 1000 },
+    { idx: 4, delay: 4000, duration: 900 },
+    { idx: 5, delay: 5000, duration: 900 },
+    { idx: 6, delay: 6000, duration: 800 },
+    { idx: 7, delay: 6900, duration: 800 },
+    { idx: 8, delay: 7800, duration: 1000 },
+  ];
+
+  steps.forEach(s => {
+    // 激活步骤
+    setTimeout(() => activateStep(s.idx), s.delay);
+    // 完成步骤
+    setTimeout(() => completeStep(s.idx, formData), s.delay + s.duration);
+  });
+
+  // 最终评级展示
+  setTimeout(() => showRating(formData), 9000);
+}
+
+function activateStep(idx) {
+  const el = document.querySelector(`.workflow-step-item[data-step="${idx}"]`);
+  if (!el) return;
+  el.classList.add('active');
+  el.querySelector('.wf-step-icon').className = 'wf-step-icon running';
+  el.querySelector('.wf-step-icon').textContent = '◉';
+  el.querySelector('.wf-step-status').className = 'wf-step-status running';
+  el.querySelector('.wf-step-status').textContent = '处理中...';
+}
+
+function completeStep(idx, formData) {
+  const el = document.querySelector(`.workflow-step-item[data-step="${idx}"]`);
+  if (!el) return;
+  el.classList.remove('active');
+  el.classList.add('done');
+  el.querySelector('.wf-step-icon').className = 'wf-step-icon done';
+  el.querySelector('.wf-step-icon').textContent = '✓';
+  el.querySelector('.wf-step-status').className = 'wf-step-status done';
+
+  // 根据步骤展示不同描述（8个Agent各司其职）
+  const descs = {
+    1: `已完成线索评级 · 行业"${formData.industry || '通用'}"权重加分 · 历史成交模型匹配`,
+    2: `客户画像生成 · 匹配到${Math.floor(Math.random() * 5) + 3}条历史相似商机 · 决策链识别完成`,
+    3: `RAG混合检索完成 · 召回${Math.floor(Math.random() * 6) + 4}篇相关文档 · 竞品对比表已生成`,
+    4: `任务DAG已规划 · ${Math.floor(Math.random() * 3) + 3}项跟进任务已分配执行人`,
+    5: `MCP工具执行完成 · 邮件/日程/报价已落地 · ${Math.floor(Math.random() * 2) + 2}项操作成功`,
+    6: `质检通过 · 信息完整度${85 + Math.floor(Math.random() * 15)}% · 无合规风险`,
+    7: `审批守卫放行 · 匹配${['L1','L2'][Math.floor(Math.random()*2)]}级审批矩阵 · 审计日志已记录`,
+    8: `CRM回写完成 · 综合评级已入库 · 全链路数据一致`
+  };
+  el.querySelector('.wf-step-status').textContent = descs[idx] || '完成';
+}
+
+function showRating(formData) {
+  document.getElementById('submitBtn').disabled = false;
+
+  // ── 1. 场景识别（基于需求描述关键词） ──
+  const req = formData.requirements + ' ' + (formData.industry || '');
+  const scenario = detectScenario(req, formData);
+
+  // ── 2. 综合评分 ──
+  let baseScore = 50;
+  const industryBonus = { '互联网': 15, '金融': 18, '制造': 10, '教育': 8, '医疗': 16, '零售': 12, '房地产': 14, '物流': 9, '能源': 17 };
+  const sourceBonus = { '官网': 12, '展会': 9, '转介绍': 20, '广告投放': 14, 'Cold Call': 3, '其他': 5 };
+  const budgetBonus = { '10万以下': -5, '10-50万': 10, '50-200万': 20, '200万以上': 30 };
+  const timelineBonus = { '1个月内': 18, '1-3个月': 12, '3-6个月': 5, '6个月以上': -5 };
+  baseScore += (industryBonus[formData.industry] || 5);
+  baseScore += (sourceBonus[formData.source] || 5);
+  baseScore += (budgetBonus[formData.budget] || 0);
+  baseScore += (timelineBonus[formData.timeline] || 0);
+  baseScore += formData.files.length * 4;
+  baseScore += Math.floor(Math.random() * 11) - 5;
+  baseScore = Math.max(5, Math.min(98, baseScore));
+
+  let grade, gradeClass, urgency, urgencyClass;
+  if (baseScore >= 85) { grade = 'S'; gradeClass = 'S'; urgency = '紧急跟进'; urgencyClass = 'hot'; }
+  else if (baseScore >= 70) { grade = 'A'; gradeClass = 'A'; urgency = '优先跟进'; urgencyClass = 'hot'; }
+  else if (baseScore >= 50) { grade = 'B'; gradeClass = 'B'; urgency = '正常跟进'; urgencyClass = 'warm'; }
+  else if (baseScore >= 30) { grade = 'C'; gradeClass = 'C'; urgency = '长期培育'; urgencyClass = 'cool'; }
+  else { grade = 'D'; gradeClass = 'D'; urgency = '暂不跟进'; urgencyClass = 'cool'; }
+
+  // ── 3. 渲染评级卡片 ──
+  document.getElementById('ratingCard').classList.remove('hidden');
+  document.getElementById('ratingGrade').textContent = grade;
+  document.getElementById('ratingGrade').className = 'rating-grade ' + gradeClass;
+  document.getElementById('ratingScore').innerHTML = `综合评分 <strong>${baseScore}</strong> / 100 · 场景: ${scenario.label}`;
+  document.getElementById('ratingUrgency').textContent = urgency;
+  document.getElementById('ratingUrgency').className = 'rating-tag ' + urgencyClass;
+  document.getElementById('ratingSummary').textContent =
+    `客户「${formData.customerName}」来自${formData.companyName}，${formData.industry || '未指定'}行业，经8个Agent协同评估后评级为 ${grade} 级。`;
+
+  const dims = [
+    { label: '需求明确度', pct: Math.min(100, baseScore + Math.floor(Math.random() * 10)) },
+    { label: '预算匹配度', pct: Math.min(100, baseScore + Math.floor(Math.random() * 16) - 8) },
+    { label: '决策时效性', pct: Math.min(100, baseScore + Math.floor(Math.random() * 20) - 10) }
+  ];
+  document.getElementById('ratingDims').innerHTML = dims.map(d => {
+    const bc = d.pct >= 70 ? 'high' : d.pct >= 40 ? 'mid' : 'low';
+    return `<div class="rating-detail-item"><div class="dim-label">${d.label}</div><div class="dim-value">${d.pct}%</div><div class="dim-bar ${bc}" style="width:${d.pct}%"></div></div>`;
+  }).join('');
+
+  // ── 4. 渲染 Agent 详细输出 ──
+  document.getElementById('agentOutputs').classList.remove('hidden');
+  renderProfileOutput(formData, scenario, grade);
+  renderKnowledgeOutput(formData, scenario);
+  renderQAOutput(formData, scenario, grade, baseScore);
+  renderApprovalOutput(formData, scenario, grade, baseScore);
+  renderCRMOutput(formData, scenario, grade, baseScore);
+
+  // ── 5. 节省时间横幅 ──
+  showTimeSaved(scenario);
+
+  // ── 6. 追加回写日志 ──
+  appendToLog(formData, scenario, grade, baseScore);
+
+  // 滚动
+  document.getElementById('ratingCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ═══════════════════════════════════════════════════
+// 场景识别引擎
+// ═══════════════════════════════════════════════════
+function detectScenario(req, fd) {
+  const r = req.toLowerCase();
+  if (r.includes('增购') || r.includes('扩容') || r.includes('升级') || r.includes('扩展') || r.includes('安全') && r.includes('api') || r.includes('企业版') || r.includes('高级')) {
+    return { id: 'upsell', label: '增购/升级', icon: '📈' };
+  }
+  if (r.includes('竞品') || r.includes('对比') || r.includes('替换') || r.includes('迁移') || r.includes('钉钉') || r.includes('企业微信')) {
+    return { id: 'competitor', label: '竞品替换', icon: '⚔️' };
+  }
+  if (r.includes('续约') || r.includes('到期') || r.includes('续费') || r.includes('renew')) {
+    return { id: 'renewal', label: '合同续约', icon: '🔄' };
+  }
+  if (r.includes('试用') || r.includes('体验') || r.includes('demo') || r.includes('演示')) {
+    return { id: 'trial', label: '试用转化', icon: '🧪' };
+  }
+  if (r.includes('丢单') || r.includes('挽回') || r.includes('流失') || r.includes('沉默')) {
+    return { id: 'winback', label: '丢单挽回', icon: '🔄' };
+  }
+  return { id: 'new', label: '新客开发', icon: '🆕' };
+}
+
+// ═══════════════════════════════════════════════════
+// 客户画像Agent 输出
+// ═══════════════════════════════════════════════════
+function renderProfileOutput(fd, scenario, grade) {
+  const card = document.getElementById('outCard2');
+  const body = document.getElementById('outBody2');
+  card.classList.remove('hidden');
+
+  // 基于行业和场景生成画像洞察
+  const industry = fd.industry || '通用';
+  const keyContacts = generateKeyContacts(industry, scenario);
+  const signals = generateSignals(fd, scenario);
+  const upsellProb = scenario.id === 'upsell' ? 65 + Math.floor(Math.random() * 25) :
+                     scenario.id === 'competitor' ? 40 + Math.floor(Math.random() * 30) :
+                     scenario.id === 'renewal' ? 70 + Math.floor(Math.random() * 20) :
+                     30 + Math.floor(Math.random() * 40);
+  const riskLevel = upsellProb < 40 ? '🟡 中风险' : upsellProb < 60 ? '🟢 低风险' : '🔵 高价值';
+
+  body.innerHTML = `
+    <p>📊 <strong>360°画像已更新</strong> — 聚合CRM记录 + 邮件往来 + 会议纪要 + ${industry}行业数据库</p>
+    <p>👥 <strong>关键决策人识别：</strong></p>
+    <ul style="margin:4px 0 8px 16px; color:var(--text-dim);">
+      ${keyContacts.map(c => `<li>${c.role} — <span class="highlight">${c.focus}</span>（${c.influence}）</li>`).join('')}
+    </ul>
+    <p>🔍 <strong>识别信号：</strong></p>
+    <p>${signals.map(s => `<span class="signal-tag">${s}</span>`).join(' ')}</p>
+    <p>📈 <strong>${scenario.label}概率：</strong><span class="highlight">${upsellProb}%</span> ${riskLevel}</p>
+    <div class="probability-bar"><div class="fill" style="width:${upsellProb}%"></div></div>
+    <p style="margin-top:8px;">📋 <strong>关联历史商机：</strong>匹配到 ${Math.floor(Math.random() * 5) + 3} 条相似记录，${industry}行业平均成交周期 ${30 + Math.floor(Math.random() * 60)} 天</p>
+  `;
+}
+
+function generateKeyContacts(industry, scenario) {
+  const pools = {
+    '互联网': [
+      { role: 'CTO / 技术VP', focus: 'API开放能力、系统稳定性', influence: '决策者' },
+      { role: 'CIO / 信息化负责人', focus: '数据安全合规、等保认证', influence: '核心推动者' },
+      { role: '业务线VP', focus: '团队协作效率、ROI', influence: '预算审批' },
+    ],
+    '金融': [
+      { role: 'CTO / 科技部负责人', focus: '私有化部署、国密算法', influence: '决策者' },
+      { role: '合规总监', focus: '金融等保、数据本地化', influence: '一票否决' },
+      { role: '业务部总经理', focus: '移动展业、客户管理', influence: '需求方' },
+    ],
+    '制造': [
+      { role: 'CIO / 数字化负责人', focus: '智能制造、供应链协同', influence: '决策者' },
+      { role: '工厂厂长', focus: '生产排期、质量管理', influence: '关键用户' },
+      { role: 'IT经理', focus: '系统集成、运维成本', influence: '执行者' },
+    ],
+  };
+  return pools[industry] || [
+    { role: 'CTO / 技术负责人', focus: '安全性、扩展性、API能力', influence: '决策者' },
+    { role: '业务负责人', focus: '团队效率、协作体验', influence: '预算审批' },
+    { role: 'IT/采购经理', focus: 'TCO、供应商对比', influence: '执行层' },
+  ];
+}
+
+function generateSignals(fd, scenario) {
+  const req = fd.requirements;
+  const signals = [];
+  if (req.includes('安全') || req.includes('合规') || req.includes('等保')) signals.push('安全合规需求明确');
+  if (req.includes('API') || req.includes('接口') || req.includes('对接') || req.includes('开放')) signals.push('API/集成需求');
+  if (req.includes('效率') || req.includes('协作') || req.includes('协同')) signals.push('协作效率诉求强');
+  if (req.includes('移动') || req.includes('手机') || req.includes('App')) signals.push('移动办公需求');
+  if (req.includes('数据') || req.includes('报表') || req.includes('分析')) signals.push('数据分析需求');
+  if (fd.budget === '200万以上' || fd.budget === '50-200万') signals.push('预算充足');
+  if (fd.timeline === '1个月内' || fd.timeline === '1-3个月') signals.push('决策窗口紧迫');
+  if (scenario.id === 'upsell') signals.push('存量客户增购信号');
+  if (scenario.id === 'competitor') signals.push('竞品替换意向');
+  if (signals.length < 3) signals.push('产品功能关注', '决策链清晰');
+  return signals.slice(0, 5);
+}
+
+// ═══════════════════════════════════════════════════
+// 知识检索Agent 输出 (RAG)
+// ═══════════════════════════════════════════════════
+function renderKnowledgeOutput(fd, scenario) {
+  const card = document.getElementById('outCard3');
+  const body = document.getElementById('outBody3');
+  card.classList.remove('hidden');
+
+  const industry = fd.industry || '通用';
+  const docs = generateRAGDocs(fd, scenario, industry);
+  const cases = generateCases(fd, scenario, industry);
+  const script = generateScript(fd, scenario);
+
+  body.innerHTML = `
+    <p>🔎 <strong>混合检索完成</strong> — 向量检索(BGE-large-zh) + BM25关键词 + Cross-Encoder重排序</p>
+    <p style="margin-top:8px;">📄 <strong>召回文档 Top-${docs.length}：</strong></p>
+    ${docs.map(d => `
+      <div class="doc-tag">
+        <span class="doc-title">${d.title}</span>
+        <span class="doc-relevance"> — 相关度 ${d.score}% · ${d.type}</span>
+      </div>
+    `).join('')}
+    <p style="margin-top:10px;">🏆 <strong>关联成功案例：</strong></p>
+    ${cases.map(c => `
+      <div class="case-card-mini">
+        <div class="case-name">${c.name}</div>
+        <div class="case-result">${c.result}</div>
+      </div>
+    `).join('')}
+    <div class="script-block">
+      <div class="script-text">${script}</div>
+    </div>
+  `;
+}
+
+function generateRAGDocs(fd, scenario, industry) {
+  const pools = {
+    upsell: [
+      { title: '飞书企业版安全白皮书 v3.2', score: 96, type: '产品文档' },
+      { title: 'API开放平台技术对接指南', score: 93, type: '技术文档' },
+      { title: `${industry}行业数字化转型方案`, score: 89, type: '行业方案' },
+      { title: '飞书高级版 vs 标准版功能对比', score: 87, type: '竞品分析' },
+      { title: '大客户增购最佳实践（2025版）', score: 84, type: '最佳实践' },
+    ],
+    competitor: [
+      { title: '飞书 vs 钉钉 功能全面对比 2025', score: 97, type: '竞品分析' },
+      { title: `${industry}行业客户迁移指南`, score: 94, type: '迁移方案' },
+      { title: `某${industry}头部客户迁移案例`, score: 91, type: '成功案例' },
+      { title: '数据迁移工具技术白皮书', score: 88, type: '技术文档' },
+      { title: '企业协作平台选型评估框架', score: 85, type: '方法论' },
+    ],
+    renewal: [
+      { title: '飞书年度续约优惠政策', score: 95, type: '商务政策' },
+      { title: `${industry}行业续约成功率分析`, score: 92, type: '数据分析' },
+      { title: '客户成功经理服务手册', score: 88, type: '运营文档' },
+      { title: '飞书2025产品路线图预览', score: 86, type: '产品规划' },
+      { title: '续约价值呈现模板与话术', score: 84, type: '销售工具' },
+    ],
+    trial: [
+      { title: '飞书30天快速上手指南', score: 96, type: '用户手册' },
+      { title: `${industry}行业标杆客户实践`, score: 93, type: '成功案例' },
+      { title: '飞书核心功能 Demo 演示脚本', score: 90, type: '销售工具' },
+      { title: '试用期关键里程碑与评估框架', score: 87, type: '方法论' },
+      { title: `${industry}行业常见痛点与解决方案`, score: 85, type: '行业方案' },
+    ],
+    winback: [
+      { title: '客户流失原因分析报告（2025Q2）', score: 94, type: '数据分析' },
+      { title: '飞书最新版本功能亮点汇总', score: 91, type: '产品更新' },
+      { title: `某${industry}客户回流成功案例`, score: 89, type: '成功案例' },
+      { title: '客户挽回专项方案模板', score: 86, type: '销售工具' },
+      { title: '竞品切换回飞书迁移方案', score: 83, type: '迁移方案' },
+    ],
+    new: [
+      { title: `飞书${industry}行业解决方案`, score: 95, type: '行业方案' },
+      { title: '飞书产品全景介绍（2025版）', score: 93, type: '产品文档' },
+      { title: `${industry}行业数字化转型白皮书`, score: 90, type: '行业洞察' },
+      { title: `某${industry}客户从0到1实践`, score: 87, type: '成功案例' },
+      { title: '企业协作平台 ROI 计算模型', score: 85, type: '方法论' },
+    ],
+  };
+  return pools[scenario.id] || pools.new;
+}
+
+function generateCases(fd, scenario, industry) {
+  const pools = {
+    upsell: [
+      { name: `某${industry}企业增购案例`, result: '从标准版升级至企业版，安全合规通过等保三级，团队效率提升 40%' },
+      { name: `某独角兽企业API集成实践`, result: '开放平台接入 15 个内部系统，日均调用 200 万次，运维成本降低 35%' },
+      { name: '某大型集团增购扩容', result: '增购 500 席位 + 企业版，年度ROI达 320%，决策周期仅 3 周' },
+    ],
+    competitor: [
+      { name: `某${industry}头部客户迁移`, result: '从竞品迁移至飞书，数据迁移零丢失，员工满意度从 3.2 升至 4.6' },
+      { name: '某连锁零售企业替换', result: '替换竞品后，巡店报告生成从 4h → 20min，门店管理效率翻倍' },
+      { name: '某金融机构系统切换', result: '私有化部署 + 国密改造，3 个月完成切换，监管检查一次通过' },
+    ],
+    renewal: [
+      { name: `某${industry}企业续约升级`, result: '续约同时升级至企业版，ARR增长 60%，NDR达 140%' },
+      { name: '某 SaaS 企业连续续约', result: '连续3年续约，从 50 席位扩至 500 席位，LTV增长 15 倍' },
+      { name: '某制造企业续约实践', result: '客户成功经理主动介入，续约前 90 天启动 QBR，续约率 100%' },
+    ],
+    trial: [
+      { name: `某${industry}企业试用转化`, result: '30天试用期内完成 3 个部门推广，转化率 85%，首年 ARR 80 万' },
+      { name: '某互联网公司 POC 实践', result: '2 周 POC 覆盖研发+产品+运营 3 部门，POC→签约仅 18 天' },
+      { name: '某教育机构试用案例', result: '试用期日活达 85%，关键功能渗透率 70%+，顺利签约 3 年合同' },
+    ],
+    winback: [
+      { name: `某${industry}客户成功回流`, result: '产品重大更新后重新评估，对比竞品后选择回归飞书' },
+      { name: '某电商企业挽回实践', result: '专属客户成功经理 + 定制化方案，6 个月挽回成功' },
+      { name: '某科技公司二度合作', result: '流失 1 年后因 API 能力增强回流，签约规模较首次翻倍' },
+    ],
+    new: [
+      { name: `某${industry}企业从0到1`, result: '3 个月完成全公司上线，日活 90%+，项目管理效率提升 50%' },
+      { name: '某成长型公司数字化启动', result: '50 人团队 1 周完成迁移，月度协作成本降低 60%' },
+      { name: `某${industry}标杆客户实践`, result: '全员采用飞书后，跨部门协作响应时间从 2 天缩至 2 小时' },
+    ],
+  };
+  return pools[scenario.id] || pools.new;
+}
+
+function generateScript(fd, scenario) {
+  const name = fd.customerName;
+  const company = fd.companyName;
+  const industry = fd.industry || '贵司';
+  const templates = {
+    upsell: `"${name}总，我们注意到${company}在安全合规和API开放方面的需求持续增长。我们的企业版已通过等保三级认证，支持私有化部署和国密算法，同时开放平台提供200+ API接口，已帮助同行业某客户在升级后团队效率提升40%。建议安排一次CTO专项演示，我可以请我们的安全架构师一起参加。"`,
+    competitor: `"${name}总，理解${company}目前在评估协同办公方案。飞书在${industry}行业已有60%头部客户覆盖，相比竞品，我们在AI智能纪要、多维表格低代码、开放平台集成方面有明显优势。某同规模客户从竞品迁移后，员工满意度从3.2提升至4.6。建议安排一次深度Demo，针对性展示贵司关心的功能。"`,
+    renewal: `"${name}总，${company}使用飞书这一年，团队协作效率提升明显，我们也即将在Q3发布重大产品更新（AI Agent自动化、知识库2.0）。续约同时可考虑升级至企业版，享受专属客户成功经理和优先技术支持，当前续约还有额外优惠。"`,
+    trial: `"${name}总，${company}的试用数据显示团队日活已达75%+。飞书在${industry}行业的标杆客户如XX、YY，均从试用期快速切入全面推广。建议接下来2周聚焦3个核心场景做深度POC，我们有专属的客户成功经理全程支持。"`,
+    winback: `"${name}总，飞书在过去一年进行了重大产品更新，包括AI智能助手、多维表格自动化、企业级安全能力等。某曾经流失的同行业客户在评估新版后选择回归。我们为${company}准备了专属回归方案，希望能有机会重新演示。"`,
+    new: `"${name}总，${company}作为${industry}行业的优秀企业，在数字化转型方面走在前面。飞书已服务超过60%的新能源车企和众多${industry}标杆客户，如XX、YY均通过飞书实现协作效率50%+提升。建议从核心团队开始试点，我们提供专属POC支持和30天免费试用。"`,
+  };
+  return templates[scenario.id] || templates.new;
+}
+
+// ═══════════════════════════════════════════════════
+// CRM回写Agent 输出
+// ═══════════════════════════════════════════════════
+function renderCRMOutput(fd, scenario, grade, score) {
+  const card = document.getElementById('outCard8');
+  const body = document.getElementById('outBody8');
+  card.classList.remove('hidden');
+
+  const products = generateRecommendedProducts(fd, scenario, grade);
+  const nextAction = generateNextAction(scenario, grade);
+  const fields = [
+    { key: 'lead_grade', val: grade },
+    { key: 'lead_score', val: score },
+    { key: 'scenario', val: scenario.label },
+    { key: `${scenario.id}_probability`, val: `${50 + Math.floor(Math.random() * 40)}%` },
+    { key: 'recommended_products', val: JSON.stringify(products) },
+    { key: 'next_action', val: nextAction.action },
+    { key: 'next_action_deadline', val: nextAction.deadline },
+    { key: 'assigned_to', val: '销售代表 + 客户成功经理' },
+    { key: 'priority', val: grade === 'S' || grade === 'A' ? 'P0-紧急' : grade === 'B' ? 'P1-高' : 'P2-中' },
+    { key: 'last_updated', val: new Date().toISOString().slice(0, 10) },
+  ];
+
+  body.innerHTML = `
+    <p>✅ <strong>CRM数据已同步</strong> — Salesforce / 纷享销客 / 销售易 三端一致</p>
+    <p style="margin-top:6px;">🔄 <strong>变更日志：</strong>${fields.length} 个字段已更新，全链路审计日志已写入</p>
+    <p style="margin-top:6px;">📦 <strong>推荐产品组合：</strong></p>
+    <p>${products.map(p => `<span class="signal-tag" style="background:rgba(52,211,153,0.12);color:#34d399;">${p}</span>`).join(' ')}</p>
+    <p style="margin-top:6px;">🎯 <strong>下一步行动：</strong><span class="highlight">${nextAction.action}</span>（截止: ${nextAction.deadline}）</p>
+    <div class="crm-fields-block">
+      <div class="crm-title">📋 CRM回写字段</div>
+      ${fields.map(f => `<span class="crm-field"><span class="cf-key">${f.key}</span> = <span class="cf-val">${f.val}</span></span>`).join('')}
+    </div>
+    <p style="margin-top:8px; font-size:0.75em; color:var(--success);">🔒 审计日志已记录 · 变更追溯ID: CRM-${Date.now().toString(36).toUpperCase()}</p>
+  `;
+}
+
+function generateRecommendedProducts(fd, scenario, grade) {
+  const req = fd.requirements.toLowerCase();
+  const products = ['飞书标准版'];
+  if (req.includes('安全') || req.includes('合规') || req.includes('api') || req.includes('企业版') || grade === 'S' || grade === 'A') {
+    products.push('企业版升级');
+  }
+  if (req.includes('api') || req.includes('接口') || req.includes('开放')) {
+    products.push('API开放平台');
+  }
+  if (req.includes('数据') || req.includes('报表') || req.includes('分析')) {
+    products.push('多维表格高级版');
+  }
+  if (scenario.id === 'upsell') {
+    products.push('专属客户成功经理', '安全合规套件');
+  }
+  if (products.length === 1) products.push('飞书OKR', '飞书知识库');
+  return [...new Set(products)];
+}
+
+function generateNextAction(scenario, grade) {
+  const priority = (grade === 'S' || grade === 'A') ? '3天内' : (grade === 'B' ? '1周内' : '2周内');
+  const actions = {
+    upsell:    { action: '预约CTO/安全架构师专项演示', deadline: priority },
+    competitor:{ action: '安排深度产品对比Demo + 迁移方案讲解', deadline: priority },
+    renewal:   { action: '发送续约方案 + 安排QBR季度业务回顾', deadline: priority },
+    trial:     { action: '锁定3个核心场景做深度POC', deadline: priority },
+    winback:   { action: '发送产品更新包 + 专属回归优惠方案', deadline: priority },
+    new:       { action: '发送行业方案 + 安排首次产品演示', deadline: priority },
+  };
+  return actions[scenario.id] || actions.new;
+}
+
+// ═══════════════════════════════════════════════════
+// 质检Agent 输出
+// ═══════════════════════════════════════════════════
+function renderQAOutput(fd, scenario, grade, score) {
+  const card = document.getElementById('outCard6');
+  const body = document.getElementById('outBody6');
+  card.classList.remove('hidden');
+
+  const completeness = 85 + Math.floor(Math.random() * 15);
+  const logicScore = 80 + Math.floor(Math.random() * 20);
+  const complianceRisk = Math.random() < 0.2 ? '发现 1 项低风险提示' : '无合规风险';
+  const riskClass = complianceRisk.includes('低风险') ? '🟡' : '🟢';
+  const missing = [];
+  if (!fd.industry) missing.push('所属行业未填写');
+  if (!fd.budget) missing.push('预算范围未填写');
+  if (!fd.timeline) missing.push('预期成交周期未填写');
+  if (fd.files.length === 0) missing.push('未上传附件');
+  const missingText = missing.length > 0
+    ? missing.map(m => `<span class="signal-tag" style="background:rgba(245,158,11,0.12);color:#f59e0b;">⚠ ${m}</span>`).join(' ')
+    : '✅ 全部必填项完整';
+
+  body.innerHTML = `
+    <p>🔍 <strong>全量质检扫描完成</strong> — 覆盖信息完整性 · 逻辑一致性 · 合规风险三个维度</p>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:8px 0;">
+      <div style="text-align:center; padding:10px; background:rgba(52,211,153,0.06); border-radius:8px;">
+        <div style="font-size:1.3em; font-weight:900; color:${completeness >= 95 ? 'var(--success)' : 'var(--warning)'};">${completeness}%</div>
+        <div style="font-size:0.7em; color:var(--text-dim);">信息完整度</div>
+      </div>
+      <div style="text-align:center; padding:10px; background:rgba(167,139,250,0.06); border-radius:8px;">
+        <div style="font-size:1.3em; font-weight:900; color:${logicScore >= 90 ? 'var(--success)' : 'var(--warning)'};">${logicScore}%</div>
+        <div style="font-size:0.7em; color:var(--text-dim);">逻辑一致性</div>
+      </div>
+      <div style="text-align:center; padding:10px; background:rgba(244,114,182,0.06); border-radius:8px;">
+        <div style="font-size:1.3em; font-weight:900; color:${complianceRisk.includes('低风险') ? 'var(--warning)' : 'var(--success)'};">${riskClass}</div>
+        <div style="font-size:0.7em; color:var(--text-dim);">合规检查</div>
+      </div>
+    </div>
+    <p style="margin-top:6px;">📋 <strong>缺失项：</strong>${missingText}</p>
+    <p style="margin-top:4px;">🛡️ <strong>合规扫描：</strong>${complianceRisk} &nbsp;|&nbsp; 需求-产品匹配度 <span class="highlight">${75 + Math.floor(Math.random() * 20)}%</span> &nbsp;|&nbsp; 方案逻辑矛盾 <span style="color:var(--success);">0 处</span></p>
+    <p style="margin-top:4px; font-size:0.75em; color:${completeness >= 95 ? 'var(--success)' : 'var(--warning)'};">📌 质检结论：${completeness >= 95 ? '✅ 通过，可提交审批' : '⚠ 建议补充缺失项后再提交'}</p>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// 审批守卫Agent 输出
+// ═══════════════════════════════════════════════════
+function renderApprovalOutput(fd, scenario, grade, score) {
+  const card = document.getElementById('outCard7');
+  const body = document.getElementById('outBody7');
+  card.classList.remove('hidden');
+
+  const budgetNum = fd.budget || '未指定';
+  const needApproval = (grade === 'S' || grade === 'A' || budgetNum === '200万以上' || budgetNum === '50-200万');
+  const approvalLevel = budgetNum === '200万以上' ? 'L2（总监+VP双签）' : 'L1（经理审批）';
+  const autoApproved = !needApproval;
+  const resultText = autoApproved ? '✅ 自动通过（金额/等级未触发审批阈值）' : `✅ 审批通过 — 匹配 ${approvalLevel}`;
+  const auditId = 'AUD-' + Date.now().toString(36).toUpperCase();
+
+  body.innerHTML = `
+    <p>🛡️ <strong>审批守卫校验完成</strong> — 匹配审批矩阵 + 金额阈值检查 + 客户等级校验</p>
+    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:8px 0;">
+      <div style="padding:8px 12px; background:rgba(167,139,250,0.06); border-radius:8px; font-size:0.8em;">
+        <span style="color:var(--text-dim);">审批矩阵匹配：</span><span class="highlight">${autoApproved ? '无需审批' : approvalLevel}</span>
+      </div>
+      <div style="padding:8px 12px; background:rgba(167,139,250,0.06); border-radius:8px; font-size:0.8em;">
+        <span style="color:var(--text-dim);">金额阈值：</span><span class="highlight">${budgetNum}</span>
+      </div>
+      <div style="padding:8px 12px; background:rgba(167,139,250,0.06); border-radius:8px; font-size:0.8em;">
+        <span style="color:var(--text-dim);">客户等级：</span><span class="highlight">${scenario.id === 'upsell' || scenario.id === 'renewal' ? '存量客户（优先）' : '新客户'}</span>
+      </div>
+      <div style="padding:8px 12px; background:rgba(167,139,250,0.06); border-radius:8px; font-size:0.8em;">
+        <span style="color:var(--text-dim);">折扣率检查：</span><span class="highlight">标准折扣（未触发审批）</span>
+      </div>
+    </div>
+    <p style="margin-top:6px; font-size:0.9em; font-weight:600; color:${autoApproved ? 'var(--success)' : 'var(--accent7)'};">${resultText}</p>
+    <p style="margin-top:4px;">📝 <strong>审计日志：</strong>审批流水号 ${auditId} &nbsp;|&nbsp; 操作人: 系统自动 &nbsp;|&nbsp; 时间戳: ${new Date().toLocaleTimeString()}</p>
+    <p style="margin-top:4px; font-size:0.75em; color:var(--text-dim);">
+      ${autoApproved
+        ? '📌 原因：综合评分 ' + score + ' 分，未触发大额审批阈值，自动放行。'
+        : '📌 审批路径：销售经理 → ' + (budgetNum === '200万以上' ? '销售VP → 财务总监' : '销售总监') + '（预计 24h 内完成）'}
+    </p>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// 节省时间横幅
+// ═══════════════════════════════════════════════════
+function showTimeSaved(scenario) {
+  const banner = document.getElementById('timeSavedBanner');
+  banner.classList.remove('hidden');
+
+  const manualMinutes = {
+    upsell: 90, competitor: 120, renewal: 60, trial: 75, winback: 100, new: 120
+  };
+  const manualMin = manualMinutes[scenario.id] || 120;
+  const agentSec = 9;
+  const savedMin = manualMin - (agentSec / 60);
+  const savedSec = Math.floor(savedMin * 60);
+  const savedDisplay = savedMin >= 1
+    ? `${Math.floor(savedMin)} 分 ${savedSec % 60} 秒`
+    : `${savedSec} 秒`;
+  const efficiency = Math.round((1 - agentSec / (manualMin * 60)) * 100);
+  const agentPct = (agentSec / (manualMin * 60) * 100).toFixed(2);
+
+  document.getElementById('tsMain').textContent = `Agent 协同耗时 ${agentSec} 秒，预估人工处理需 ${manualMin} 分钟`;
+  document.getElementById('tsDetail').innerHTML = `节省 <strong>${savedDisplay}</strong>（提效 ${efficiency}%）`;
+  document.getElementById('tsBarManual').style.width = '100%';
+  document.getElementById('tsBarAgent').style.width = agentPct + '%';
+}
+
+// ═══════════════════════════════════════════════════
+// 回写日志
+// ═══════════════════════════════════════════════════
+function appendToLog(fd, scenario, grade, score) {
+  const auditId = 'CRM-' + Date.now().toString(36).toUpperCase();
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+
+  submissionLog.push({
+    idx: submissionLog.length + 1,
+    time: timeStr,
+    customer: fd.customerName,
+    company: fd.companyName,
+    industry: fd.industry || '—',
+    scenario: scenario.label,
+    grade,
+    score,
+    auditId,
+    formData: fd
+  });
+
+  updateLogTable();
+  updateDistribution();
+}
+
+function updateLogTable() {
+  const logSection = document.getElementById('logSection');
+  const tbody = document.getElementById('logTableBody');
+  const logCount = document.getElementById('logCount');
+  logSection.classList.remove('hidden');
+  logCount.textContent = `共 ${submissionLog.length} 条`;
+
+  if (submissionLog.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="log-empty">暂无回写记录，提交资料后将自动追加</td></tr>';
+    return;
+  }
+
+  // 倒序显示（最新在前）
+  const reversed = [...submissionLog].reverse();
+  tbody.innerHTML = reversed.map(log => `
+    <tr>
+      <td class="log-idx">${log.idx}</td>
+      <td>${log.time}</td>
+      <td>${log.customer}</td>
+      <td>${log.company}</td>
+      <td>${log.scenario}</td>
+      <td><span class="log-badge ${log.grade}">${log.grade}</span></td>
+      <td>${log.score}</td>
+      <td style="font-size:0.7em;font-family:monospace;">${log.auditId}</td>
+    </tr>
+  `).join('');
+
+  // 同步更新业务结果 Tab 的日志表
+  updateSummaryLog();
+}
+
+function updateDistribution() {
+  const total = submissionLog.length;
+  if (total === 0) return;
+
+  const counts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+  let sumScore = 0;
+  submissionLog.forEach(log => {
+    counts[log.grade] = (counts[log.grade] || 0) + 1;
+    sumScore += log.score;
+  });
+
+  const avgScore = Math.round(sumScore / total);
+  const saCount = (counts.S || 0) + (counts.A || 0);
+  const saPct = Math.round(saCount / total * 100);
+
+  ['S', 'A', 'B', 'C', 'D'].forEach(g => {
+    const count = counts[g] || 0;
+    const pct = total > 0 ? Math.round(count / total * 100) : 0;
+    const countEl = document.getElementById('distroCount' + g);
+    const pctEl = document.getElementById('distroPct' + g);
+    const barEl = document.getElementById('distroBar' + g);
+    if (countEl) countEl.textContent = count;
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (barEl) barEl.style.width = pct + '%';
+  });
+
+  document.getElementById('distroTotal').textContent = total;
+  document.getElementById('distroAvg').textContent = avgScore;
+  document.getElementById('distroSA').textContent = saPct + '%';
+}
+
+function updateSummaryLog() {
+  const summaryBody = document.getElementById('summaryLogBody');
+  const summaryCount = document.getElementById('summaryLogCount');
+  if (!summaryBody) return;
+  summaryCount.textContent = `共 ${submissionLog.length} 条`;
+
+  if (submissionLog.length === 0) {
+    summaryBody.innerHTML = '<tr><td colspan="9" class="log-empty">暂无回写记录，请在右下角「提交资料」中提交客户信息</td></tr>';
+    return;
+  }
+
+  const reversed = [...submissionLog].reverse();
+  summaryBody.innerHTML = reversed.map(log => `
+    <tr>
+      <td class="log-idx">${log.idx}</td>
+      <td>${log.time}</td>
+      <td>${log.customer}</td>
+      <td>${log.company}</td>
+      <td>${log.industry}</td>
+      <td>${log.scenario}</td>
+      <td><span class="log-badge ${log.grade}">${log.grade}</span></td>
+      <td>${log.score}</td>
+      <td style="font-size:0.7em;font-family:monospace;">${log.auditId}</td>
+    </tr>
+  `).join('');
+}
+</script>
+
+<!-- ==================== 提交资料对话框 ==================== -->
+<div class="modal-overlay hidden" id="submitModal">
+  <div class="submit-modal">
+    <div class="modal-header">
+      <h2>📋 提交客户资料</h2>
+      <button class="modal-close" onclick="closeSubmitModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="submitForm" onsubmit="return false;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>客户名称 <span class="required">*</span></label>
+            <input type="text" name="customerName" placeholder="如：张三 / 李经理" required>
+          </div>
+          <div class="form-group">
+            <label>公司名称 <span class="required">*</span></label>
+            <input type="text" name="companyName" placeholder="如：XX科技有限公司" required>
+          </div>
+          <div class="form-group">
+            <label>所属行业</label>
+            <select name="industry">
+              <option value="">请选择行业</option>
+              <option value="互联网">互联网</option>
+              <option value="金融">金融</option>
+              <option value="制造">制造</option>
+              <option value="教育">教育</option>
+              <option value="医疗">医疗</option>
+              <option value="零售">零售</option>
+              <option value="房地产">房地产</option>
+              <option value="物流">物流</option>
+              <option value="能源">能源</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>联系方式</label>
+            <input type="text" name="contact" placeholder="手机号 / 邮箱 / 微信">
+          </div>
+          <div class="form-group">
+            <label>线索来源</label>
+            <select name="source">
+              <option value="">请选择来源</option>
+              <option value="官网">官网注册</option>
+              <option value="展会">行业展会</option>
+              <option value="转介绍">客户转介绍</option>
+              <option value="广告投放">广告投放</option>
+              <option value="Cold Call">Cold Call</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>预算范围</label>
+            <select name="budget">
+              <option value="">请选择预算</option>
+              <option value="10万以下">10万以下</option>
+              <option value="10-50万">10-50万</option>
+              <option value="50-200万">50-200万</option>
+              <option value="200万以上">200万以上</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>预期成交周期</label>
+            <select name="timeline">
+              <option value="">请选择周期</option>
+              <option value="1个月内">1个月内</option>
+              <option value="1-3个月">1-3个月</option>
+              <option value="3-6个月">3-6个月</option>
+              <option value="6个月以上">6个月以上</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>需求描述 <span class="required">*</span></label>
+            <textarea name="requirements" placeholder="请描述客户的核心需求、痛点及期望解决的问题..." required></textarea>
+          </div>
+          <div class="form-group full">
+            <label>附件上传</label>
+            <div class="upload-zone" onclick="triggerFileUpload()">
+              <div class="upload-icon">📎</div>
+              <div class="upload-text">点击上传相关文件</div>
+              <div class="upload-hint">支持 PDF / Word / Excel / PPT / 图片，单文件不超过 20MB</div>
+            </div>
+            <div class="upload-file-list" id="fileList"></div>
+          </div>
+        </div>
+      </form>
+
+      <!-- 工作流结果 -->
+      <div class="result-panel hidden" id="resultPanel">
+        <div class="workflow-steps">
+          <div class="workflow-step-item" data-step="1">
+            <div class="wf-step-icon pending" data-idx="1">1</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">线索评级Agent</div>
+              <div class="wf-step-desc">多维度评分 · 行业权重 · 历史成交模型</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="2">
+            <div class="wf-step-icon pending" data-idx="2">2</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">客户画像Agent</div>
+              <div class="wf-step-desc">360度画像 · 决策链识别 · 历史商机匹配</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="3">
+            <div class="wf-step-icon pending" data-idx="3">3</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">知识检索Agent</div>
+              <div class="wf-step-desc">RAG混合检索 · 方案匹配 · 竞品分析</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="4">
+            <div class="wf-step-icon pending" data-idx="4">4</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">任务规划Agent</div>
+              <div class="wf-step-desc">生成跟进任务DAG · 执行人分配 · 截止时间</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="5">
+            <div class="wf-step-icon pending" data-idx="5">5</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">工具执行Agent</div>
+              <div class="wf-step-desc">MCP调用 · 邮件发送 · 日程创建 · 报价查询</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="6">
+            <div class="wf-step-icon pending" data-idx="6">6</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">质检Agent</div>
+              <div class="wf-step-desc">信息完整性检测 · 逻辑矛盾识别 · 合规风险扫描</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="7">
+            <div class="wf-step-icon pending" data-idx="7">7</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">审批守卫Agent</div>
+              <div class="wf-step-desc">审批矩阵匹配 · 多级审批流 · 审计日志记录</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+          <div class="workflow-step-item" data-step="8">
+            <div class="wf-step-icon pending" data-idx="8">8</div>
+            <div class="wf-step-info">
+              <div class="wf-step-name">CRM回写Agent · 综合评级输出</div>
+              <div class="wf-step-desc">数据回写CRM · S/A/B/C/D等级 · 跟进策略 · 全链路可追溯</div>
+            </div>
+            <div class="wf-step-status">等待中</div>
+          </div>
+        </div>
+
+        <!-- 评级结果卡片 -->
+        <div class="rating-card hidden" id="ratingCard" style="margin: 0 20px 20px;">
+          <div class="rating-grade S" id="ratingGrade">S</div>
+          <div class="rating-score" id="ratingScore">综合评分 <strong>92</strong> / 100</div>
+          <div class="rating-tags">
+            <span class="rating-tag hot" id="ratingUrgency">紧急跟进</span>
+          </div>
+          <p style="color:var(--text-dim); font-size:0.85em;" id="ratingSummary"></p>
+          <div class="rating-detail" id="ratingDims"></div>
+        </div>
+
+        <!-- Agent 详细输出区 -->
+        <div class="agent-outputs hidden" id="agentOutputs">
+          <!-- 客户画像Agent -->
+          <div class="agent-output-card c2 hidden" id="outCard2">
+            <div class="agent-output-header">
+              <div class="agent-output-icon c2">2</div>
+              <div class="agent-output-name">客户画像Agent · 洞察输出</div>
+            </div>
+            <div class="agent-output-body" id="outBody2"></div>
+          </div>
+          <!-- 知识检索Agent -->
+          <div class="agent-output-card c3 hidden" id="outCard3">
+            <div class="agent-output-header">
+              <div class="agent-output-icon c3">3</div>
+              <div class="agent-output-name">知识检索Agent · RAG召回</div>
+            </div>
+            <div class="agent-output-body" id="outBody3"></div>
+          </div>
+          <!-- 质检Agent -->
+          <div class="agent-output-card c6 hidden" id="outCard6">
+            <div class="agent-output-header">
+              <div class="agent-output-icon c6">6</div>
+              <div class="agent-output-name">质检Agent · 质量检查报告</div>
+            </div>
+            <div class="agent-output-body" id="outBody6"></div>
+          </div>
+          <!-- 审批守卫Agent -->
+          <div class="agent-output-card c7 hidden" id="outCard7">
+            <div class="agent-output-header">
+              <div class="agent-output-icon c7">7</div>
+              <div class="agent-output-name">审批守卫Agent · 审批决策</div>
+            </div>
+            <div class="agent-output-body" id="outBody7"></div>
+          </div>
+          <!-- CRM回写Agent -->
+          <div class="agent-output-card c8 hidden" id="outCard8">
+            <div class="agent-output-header">
+              <div class="agent-output-icon c8">8</div>
+              <div class="agent-output-name">CRM回写Agent · 数据入库</div>
+            </div>
+            <div class="agent-output-body" id="outBody8"></div>
+          </div>
+        </div>
+
+        <!-- 节省时间横幅 -->
+        <div class="time-saved-banner hidden" id="timeSavedBanner">
+          <div class="ts-icon">⏱️</div>
+          <div class="ts-main" id="tsMain">Agent 协同耗时 9 秒，预估人工处理需 120 分钟</div>
+          <div class="ts-detail" id="tsDetail">节省 <strong>119 分 51 秒</strong>（提效 99.9%）</div>
+          <div class="ts-bar-wrap">
+            <span class="ts-label">人工</span>
+            <div class="ts-bar"><div class="ts-bar-fill" id="tsBarManual" style="width:100%"></div></div>
+            <span class="ts-label" style="color:var(--success);">Agent</span>
+            <div class="ts-bar"><div class="ts-bar-fill" id="tsBarAgent" style="width:0.15%"></div></div>
+          </div>
+        </div>
+
+        <!-- 回写日志表 -->
+        <div class="log-section hidden" id="logSection">
+          <h3>📋 CRM回写日志 <span style="font-size:0.75em;color:var(--text-dim);font-weight:400;" id="logCount">共 0 条</span></h3>
+          <div class="log-table-wrap">
+            <table class="log-table">
+              <thead>
+                <tr><th>#</th><th>时间</th><th>客户</th><th>公司</th><th>场景</th><th>评级</th><th>评分</th><th>审计ID</th></tr>
+              </thead>
+              <tbody id="logTableBody">
+                <tr><td colspan="8" class="log-empty">暂无回写记录，提交资料后将自动追加</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <button class="btn btn-secondary btn-reset" onclick="closeSubmitModal()" style="display:block; margin:0 auto 20px;">关闭</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSubmitModal()">取消</button>
+      <button class="btn btn-primary" id="submitBtn" onclick="submitMaterials()">
+        🚀 提交并启动评级
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 浮动提交按钮 -->
+<button class="fab-submit" onclick="openSubmitModal()" title="提交客户资料">
+  <span class="fab-icon">📋</span>
+  <span class="fab-text">提交资料</span>
+</button>
+
+</body>
+</html>
