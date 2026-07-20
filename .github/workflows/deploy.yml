@@ -1,0 +1,64 @@
+name: Deploy CRM Platform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase Project
+        run: supabase link --project-ref ebsndpzlfjeuojjkwycn
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # 部署数据库迁移 (通过GitHub集成自动处理)
+      - name: Deploy Database Migrations
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # 部署Edge Functions
+      - name: Deploy Edge Functions
+        run: |
+          supabase functions deploy agent-orchestrator
+          supabase functions deploy generate-embedding
+          supabase functions deploy llm-agent
+          supabase functions deploy cost-controller
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # 注入Supabase配置到前端
+      - name: Inject Config
+        run: |
+          cat > config.js << 'EOF'
+          window.SUPABASE_CONFIG = {
+            url: '${{ secrets.SUPABASE_URL }}',
+            anonKey: '${{ secrets.SUPABASE_ANON_KEY }}'
+          };
+          EOF
+
+      # 部署到GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
