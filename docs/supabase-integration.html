@@ -1,0 +1,240 @@
+
+<!-- 在 index.html 的 <head> 中插入以下内容 -->
+
+<!-- 1. Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+
+<!-- 2. 配置注入 (GitHub Actions会自动替换这些值) -->
+<script>
+  // 生产环境配置 (GitHub Actions注入)
+  const SUPABASE_URL = window.SUPABASE_CONFIG?.url || 'https://ebsndpzlfjeuojjkwycn.supabase.co';
+  const SUPABASE_ANON_KEY = window.SUPABASE_CONFIG?.anonKey || 'your-anon-key';
+
+  // 初始化客户端
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    },
+    realtime: {
+      params: { eventsPerSecond: 10 }
+    }
+  });
+
+  // 全局暴露
+  window.supabaseClient = supabase;
+</script>
+
+<!-- 3. 业务API封装 -->
+<script>
+// ==================== CRM业务API ====================
+
+const CRMAPI = {
+  // 认证
+  async signIn(email, password) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  },
+
+  async signUp(email, password, userData) {
+    const { data, error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: userData }
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  },
+
+  async getProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, teams:team_id(name)')
+      .eq('id', user.id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // 商机管理
+  async createOpportunity(customerData) {
+    const user = await this.getUser();
+
+    // 1. 创建客户
+    const { data: customer, error: cErr } = await supabase
+      .from('customers')
+      .insert([{
+        name: customerData.customerName,
+        company_name: customerData.companyName,
+        industry: customerData.industry,
+        contact_info: { phone: customerData.contact, source: customerData.source },
+        source: customerData.source,
+        assigned_to: user?.id
+      }])
+      .select()
+      .single();
+    if (cErr) throw cErr;
+
+    // 2. 创建商机
+    const { data: opp, error: oErr } = await supabase
+      .from('opportunities')
+      .insert([{
+        customer_id: customer.id,
+        title: `${customerData.companyName} - ${customerData.industry || '通用'}商机`,
+        budget_range: customerData.budget,
+        expected_close_date: this._calcCloseDate(customerData.timeline),
+        owner_id: user?.id,
+        current_stage: 'NEW'
+      }])
+      .select()
+      .single();
+    if (oErr) throw oErr;
+
+    return { customer, opportunity: opp };
+  },
+
+  async updateOpportunityRating(oppId, rating) {
+    const { data, error } = await supabase
+      .from('opportunities')
+      .update({
+        lead_score: rating.score,
+        lead_grade: rating.grade,
+        scenario_type: rating.scenario,
+        ai_confidence: rating.confidence,
+        requires_human: rating.requiresHuman,
+        current_stage: rating.requiresHuman ? 'HOLD' : 'SCORED'
+      })
+      .eq('id', oppId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async listOpportunities(filters = {}) {
+    let query = supabase
+      .from('opportunities')
+      .select(`
+        *,
+        customers:customer_id(name, company_name, industry),
+        profiles:owner_id(full_name, role)
+      `);
+
+    if (filters.grade) query = query.eq('lead_grade', filters.grade);
+    if (filters.stage) query = query.eq('current_stage', filters.stage);
+    if (filters.search) {
+      query = query.or(`title.ilike.%${filters.search}%,customers.company_name.ilike.%${filters.search}%`);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  // Agent运行记录
+  async logAgentRun(oppId, agentName, runData) {
+    const { data, error } = await supabase
+      .from('agent_runs')
+      .insert([{
+        opportunity_id: oppId,
+        agent_name: agentName,
+        status: runData.status,
+        latency_ms: runData.latency,
+        token_count: runData.tokens,
+        cost_usd: runData.cost,
+        output_data: runData.output,
+        confidence: runData.confidence,
+        error_message: runData.error
+      }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getAgentRuns(oppId) {
+    const { data, error } = await supabase
+      .from('agent_runs')
+      .select('*')
+      .eq('opportunity_id', oppId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  // 实时订阅
+  subscribeOpportunities(callback) {
+    return supabase
+      .channel('opportunities_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'opportunities' }, callback)
+      .subscribe();
+  },
+
+  subscribeAgentRuns(oppId, callback) {
+    return supabase
+      .channel(`agent_runs_${oppId}`)
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'agent_runs', filter: `opportunity_id=eq.${oppId}` },
+        (payload) => callback(payload.new)
+      )
+      .subscribe();
+  },
+
+  // 管理驾驶舱数据
+  async getDashboardStats() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const profile = await this.getProfile();
+    const teamId = profile?.team_id;
+
+    // 获取团队商机统计
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('current_stage, lead_grade, estimated_value')
+      .eq('team_id', teamId);
+    if (error) throw error;
+
+    const stats = {
+      total: opps.length,
+      byStage: {},
+      byGrade: {},
+      totalValue: 0,
+      won: 0,
+      lost: 0
+    };
+
+    opps.forEach(o => {
+      stats.byStage[o.current_stage] = (stats.byStage[o.current_stage] || 0) + 1;
+      stats.byGrade[o.lead_grade] = (stats.byGrade[o.lead_grade] || 0) + 1;
+      stats.totalValue += o.estimated_value || 0;
+      if (o.current_stage === 'WON') stats.won++;
+      if (o.current_stage === 'LOST') stats.lost++;
+    });
+
+    const totalClosed = stats.won + stats.lost;
+    stats.conversionRate = totalClosed > 0 ? (stats.won / totalClosed * 100).toFixed(1) : 0;
+
+    return stats;
+  },
+
+  // 辅助方法
+  _calcCloseDate(timeline) {
+    const now = new Date();
+    const map = { '1个月内': 30, '1-3个月': 60, '3-6个月': 120, '6个月以上': 180 };
+    now.setDate(now.getDate() + (map[timeline] || 90));
+    return now.toISOString().split('T')[0];
+  }
+};
+
+// 全局暴露
+window.CRMAPI = CRMAPI;
+</script>
